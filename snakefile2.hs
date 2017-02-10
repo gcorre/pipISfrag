@@ -14,7 +14,7 @@ SAMPLE=list(set(FILES))[0];
 TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 
 rule targets:
-	input: "12-Annotation_R1R2/"+SAMPLE+"_TAG"+TAG+"_IS.bed", "12-Annotation/"+SAMPLE+"_R1_TAG"+TAG+"_IS_sorted.bed","11-mappingR1alone/"+SAMPLE+"_R1_TAG"+TAG+"_mapped.sam"
+	input: "12-Annotation_R1R2/"+SAMPLE+"_TAG"+TAG+"_IS.bed", "12-Annotation/"+SAMPLE+"_R1_TAG"+TAG+"_IS_sorted.bed","12-AnnotationR1alone/"+SAMPLE+"_R1_TAG"+TAG+"_IS_sorted.bed"
 
 	
 rule Demultiplex:
@@ -203,7 +203,6 @@ rule Filter_MapR1R2:
 			
 			
 			
-			
 	threads: 8
 	message: "Sort SAM by read name, convert to bed, find IS and calculate fragments size from R1 and R2 extremities"
 	shell: """
@@ -219,8 +218,29 @@ rule Filter_MapR1R2:
 			bedtools groupby -i {output.IScollapsedSize}  -g 6 -c 1,2,3,4,5,7,8 -o distinct,mode,mode,collapse,distinct,count_distinct,sum | cut -f 2-  > {output.IScollapsed}
 			"""
 
+rule cut_TTAAR1alone:
+	input: rules.LinkerR2.output.R1noLinker
+	output: TTAA="08-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq"
+	message: "Cutting TTAA sequences that are still present"
+	threads: 8
+	log: "log/TTAAR1alone.log"
+	shell: """
+			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input} > {output.TTAA}
+			"""			
+			
+rule collapse_readsR1alone:
+	input: rules.cut_TTAAR1alone.output.TTAA
+	output: file = "10-collapsedR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut_trimmed.fastq"
+	message: "Collapsing identical reads before mapping"
+	log:"log/collapsingR1alone.log"
+	shell: """
+			#fastx_collapser -v -i {input} -o {output} > {log}
+			 seqcluster collapse -f {input} -d -o "10-collapsedR1alone/" -m 0
+			"""	
+
+			
 rule Mapping_R1alone:
-		input: R1=rules.LinkerR2.output.R1noLinker
+		input: R1=rules.collapse_readsR1alone.output.file
 		output: mapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_mapped.sam",unmapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_unmapped.fastq"
 		message:"Mapping R1 reads without Linker in R1 nor R2"
 		threads: 8
@@ -228,3 +248,32 @@ rule Mapping_R1alone:
 		shell: """
 				bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --no-unal --un {output.unmapped} --met-file {log.met} {input.R1} -S {output.mapped} 2> {log.summary}
 				"""
+				
+rule Filter_MapR1alone:
+	input: rules.Mapping_R1alone.output.mapped
+	output: bam="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped.bam",
+			sortbam="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
+			idx="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
+			bed="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped_sorted.bed",
+			IS="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS.bed",
+			ISsorted="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
+			ISsortednum="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
+			IScollapsedSize="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
+			IScluster="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
+			ISclustersorted="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
+			IScollapsed="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
+	params: qual="10"
+	message:"Filtering mapped reads, converting to BED,Collapsing by 3nt and counting read abundance by IS"
+	shell: """ 
+			samtools view -q {params.qual} -bS {input} > {output.bam};
+			samtools sort {output.bam} > {output.sortbam};
+			samtools index {output.sortbam} {output.idx};
+			bedtools bamtobed -i {output.sortbam} > {output.bed};
+			awk 'function abs(a){{return ((a < 0) ? -a : a)}} OFS="\\t" {{split($4,a,"x");print $0,abs($3-$2),a[2]}}' {output.bed} > {output.ISsortednum};
+			awk 'OFS="\\t" {{if($6=="-") {{print $1,$3-1,$3,$4,$5,$6,$7,$8}} else {{print $1,$2,$2+1,$4,$5,$6,$7,$8}}}}' {output.ISsortednum} > {output.IS};
+			bedtools sort -i {output.IS} > {output.ISsorted};
+			bedtools cluster -s  -i {output.ISsorted} > {output.IScluster};
+			sort -k 1,1 -k 2,2n -k 3,3n -k 6,6 -k 7,7n {output.IScluster} > {output.ISclustersorted};
+			bedtools groupby -i {output.ISclustersorted}  -g 9,7 -c 1,2,3,4,5,6,7,8,8,9 -o distinct,mode,mode,collapse,median,distinct,distinct,sum,count,distinct  | cut -f 3- > {output.IScollapsedSize};
+			bedtools groupby -i {output.IScollapsedSize}  -g 10 -c 1,2,3,4,5,6,8,9,7 -o distinct,mode,mode,collapse,median,distinct,sum,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
+			"""
