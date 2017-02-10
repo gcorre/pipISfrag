@@ -1,10 +1,9 @@
-workdir: "/home/"
+#workdir: "/home/"
 #from snakemake.utils import report
 #TAG="1"
 	
 BOWTIE2_INDEX = "/home/references/genomes/homo_sapiens/hg19_GRCh37/index_bowtie2/GRCh37.75"
 
-### JJJJJ
 
 from glob import glob;
 FILES = glob('*R[0-9]_[0-9]*.fastq.gz');
@@ -15,7 +14,7 @@ SAMPLE=list(set(FILES))[0];
 TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 
 rule targets:
-	input: "12-Annotation_R1R2/"+SAMPLE+"_TAG"+TAG+"_IS.bed", "12-Annotation/"+SAMPLE+"_R1_TAG"+TAG+"_IS_sorted.bed"
+	input: "12-Annotation_R1R2/"+SAMPLE+"_TAG"+TAG+"_IS.bed", "12-Annotation/"+SAMPLE+"_R1_TAG"+TAG+"_IS_sorted.bed","11-mappingR1alone/"+SAMPLE+"_R1_TAG"+TAG+"_mapped.sam"
 
 	
 rule Demultiplex:
@@ -27,7 +26,6 @@ rule Demultiplex:
 	shell: """
 			 fastq-multx -B ../dataset/illuminaTAGs_eautils.txt -b -x -m 1 {input.R1} {input.R2} -o 01-Demultiplex/{wildcards.NAME}_R1_%.fastq.gz 01-Demultiplex/{wildcards.NAME}_R2_%.fastq.gz > {log};
 			"""
-			
 			
 rule provirus:
 	input: R1=rules.Demultiplex.output.R1, R2=rules.Demultiplex.output.R2
@@ -190,7 +188,7 @@ rule Mapping_R1R2:
 	shell: """
 			bowtie2 -p {threads} -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --no-unal --al-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X 800 --no-mixed --met-file {log.met} 2> {log.summary}
 			"""
-#cuicui			
+
 rule Filter_MapR1R2:
 	input: sam = rules.Mapping_R1R2.output.mapped
 	output: bam = "12-Annotation_R1R2/{NAME}_TAG{TAG}.bam",
@@ -221,11 +219,12 @@ rule Filter_MapR1R2:
 			bedtools groupby -i {output.IScollapsedSize}  -g 6 -c 1,2,3,4,5,7,8 -o distinct,mode,mode,collapse,distinct,count_distinct,sum | cut -f 2-  > {output.IScollapsed}
 			"""
 
-			
-				
-
-
-
-			
-			
-			
+rule Mapping_R1alone:
+		input: R1=rules.LinkerR2.output.R1noLinker
+		output: mapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_mapped.sam",unmapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_unmapped.fastq"
+		message:"Mapping R1 reads without Linker in R1 nor R2"
+		threads: 8
+		log: met="log/mappingR1alone.log",summary="log/mappingR1alone_numbers.log"
+		shell: """
+				bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --no-unal --un {output.unmapped} --met-file {log.met} {input.R1} -S {output.mapped} 2> {log.summary}
+				"""
