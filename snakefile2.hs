@@ -4,6 +4,7 @@ workdir: "/home/"
 	
 BOWTIE2_INDEX = "/home/references/genomes/homo_sapiens/hg19_GRCh37/index_bowtie2/GRCh37.75"
 
+### JJJJJ
 
 from glob import glob;
 FILES = glob('*R[0-9]_[0-9]*.fastq.gz');
