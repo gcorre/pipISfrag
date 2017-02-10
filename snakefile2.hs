@@ -106,7 +106,7 @@ rule mappingR1_full :
 	threads: 8
 	message: "Mapping1 : Mapping with Bowtie2 of R1 reads starting with GCA"
 	shell: """
-			bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --no-unal --un {output.unmapped} --met-file {log.met} {input} -S {output.mapped} 2> {log.summary}
+			bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --trim3 5 --no-unal --un {output.unmapped} --met-file {log.met} {input} -S {output.mapped} 2> {log.summary}
 			"""
 
 rule Filter_MapR1:
@@ -186,7 +186,7 @@ rule Mapping_R1R2:
 	log: met="log/mappingR1R2.log",summary="log/mappingR1R2_numbers.log"
 	threads: 8
 	shell: """
-			bowtie2 -p {threads} -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --no-unal --al-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X 800 --no-mixed --met-file {log.met} 2> {log.summary}
+			bowtie2 -p {threads} -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 5 --no-unal --al-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X 800 --no-mixed --met-file {log.met} 2> {log.summary}
 			"""
 
 rule Filter_MapR1R2:
@@ -246,7 +246,7 @@ rule Mapping_R1alone:
 		threads: 8
 		log: met="log/mappingR1alone.log",summary="log/mappingR1alone_numbers.log"
 		shell: """
-				bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --no-unal --un {output.unmapped} --met-file {log.met} {input.R1} -S {output.mapped} 2> {log.summary}
+				bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --trim3 5 --no-unal --un {output.unmapped} --met-file {log.met} {input.R1} -S {output.mapped} 2> {log.summary}
 				"""
 				
 rule Filter_MapR1alone:
