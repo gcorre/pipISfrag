@@ -34,7 +34,7 @@ SAMPLE=list(set(FILES))[0];
 TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 
 rule targets:
-	input: "12-Annotation_R1R2/"+SAMPLE+"_TAG"+TAG+"_IS.bed", "12-Annotation/"+SAMPLE+"_R1_TAG"+TAG+"_IS_sorted.bed","12-AnnotationR1alone/"+SAMPLE+"_R1_TAG"+TAG+"_IS_sorted.bed"
+	input: "13-qualitativeIS/"+SAMPLE+"_TAG"+TAG+"_qualIS_merged.bed"
 
 	
 rule Demultiplex:
@@ -155,7 +155,7 @@ rule Filter_MapR1:
 			bedtools cluster -s  -i {output.ISsorted} > {output.IScluster};
 			sort -k 1,1 -k 2,2n -k 3,3n -k 6,6 -k 7,7n {output.IScluster} > {output.ISclustersorted};
 			bedtools groupby -i {output.ISclustersorted}  -g 9,7 -c 1,2,3,4,5,6,7,8,8,9 -o distinct,mode,mode,collapse,median,distinct,distinct,sum,count,distinct  | cut -f 3- > {output.IScollapsedSize};
-			bedtools groupby -i {output.IScollapsedSize}  -g 10 -c 1,2,3,4,5,6,8,9,7 -o distinct,mode,mode,collapse,median,distinct,sum,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
+			bedtools groupby -i {output.IScollapsedSize}  -g 10 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
 			"""
 			
 	
@@ -228,14 +228,14 @@ rule Filter_MapR1R2:
 	shell: """
 			samtools sort {input.sam} -o {output.bam} -O BAM -n;
 			bedtools bamtobed -i {output.bam} > {output.bed};
-			awk '{{ ORS = (NR%2 ? "\\t" : RS) }} 1' {output.bed} | awk 'OFS="\\t" {{if($6=="+"){{print $1,$2,$2+1,substr($4, 1, length($4)-2),$9-$2,$6 }} else {{print $1,$3,$3+1,substr($4, 1, length($4)-2),$3-$8,$6}}}}' > {output.IS};
+			awk '{{ ORS = (NR%2 ? "\\t" : RS) }} 1' {output.bed} | awk 'OFS="\\t" {{if($6=="+"){{print $1,$2,$2+1,substr($4, 1, length($4)-2),$5,$6,$9-$2 }} else {{print $1,$3,$3+1,substr($4, 1, length($4)-2),$5,$6,$3-$8}}}}' > {output.IS};
 			samtools view -bS {input.sam} | samtools sort - -o {output.bam} -O bam;
 			samtools index {output.bam} {output.idx};
 			bedtools sort -i {output.IS} > {output.ISsorted};
 			bedtools cluster -s  -i {output.ISsorted} > {output.IScluster};
-			sort -k 1,1 -k 2,2n -k 3,3n -k 6,6 -k 5,5n {output.IScluster} > {output.ISclustersorted};
-			bedtools groupby -i {output.ISclustersorted}  -g 7,5 -c 1,2,3,4,6,7,5,5, -o distinct,mode,mode,collapse,distinct,distinct,distinct,count  | cut -f 3- > {output.IScollapsedSize};
-			bedtools groupby -i {output.IScollapsedSize}  -g 6 -c 1,2,3,4,5,7,8 -o distinct,mode,mode,collapse,distinct,count_distinct,sum | cut -f 2-  > {output.IScollapsed}
+			sort -k 1,1 -k 2,2n -k 3,3n -k 6,6 -k 7,7n {output.IScluster} > {output.ISclustersorted};
+			bedtools groupby -i {output.ISclustersorted}  -g 7,6 -c 1,2,3,4,5,6,7,7,8 -o distinct,mode,mode,collapse,median,distinct,distinct,count,distinct  | cut -f 3- > {output.IScollapsedSize};
+			bedtools groupby -i {output.IScollapsedSize}  -g 9 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
 			"""
 
 rule cut_TTAAR1alone:
@@ -278,7 +278,7 @@ rule Filter_MapR1alone:
 			IS="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS.bed",
 			ISsorted="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
 			ISsortednum="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
-			#IScollapsedSize="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
+			IScollapsedSize="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
 			IScluster="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
 			ISclustersorted="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
 			IScollapsed="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
@@ -289,22 +289,23 @@ rule Filter_MapR1alone:
 			samtools sort {output.bam} > {output.sortbam};
 			samtools index {output.sortbam} {output.idx};
 			bedtools bamtobed -i {output.sortbam} > {output.bed};
-			awk 'function abs(a){{return ((a < 0) ? -a : a)}} OFS="\\t" {{split($4,a,"x");print $0,a[2]}}' {output.bed} > {output.ISsortednum};
-			awk 'OFS="\\t" {{if($6=="-") {{print $1,$3-1,$3,$4,$5,$6,$7}} else {{print $1,$2,$2+1,$4,$5,$6,$7}}}}' {output.ISsortednum} > {output.IS};
+			awk 'function abs(a){{return ((a < 0) ? -a : a)}} OFS="\\t" {{split($4,a,"x");print $0,0,a[2]}}' {output.bed} > {output.ISsortednum};
+			awk 'OFS="\\t" {{if($6=="-") {{print $1,$3-1,$3,$4,$5,$6,$7,$8}} else {{print $1,$2,$2+1,$4,$5,$6,$7,$8}}}}' {output.ISsortednum} > {output.IS};
 			bedtools sort -i {output.IS} > {output.ISsorted};
 			bedtools cluster -s  -i {output.ISsorted} > {output.IScluster};
 			sort -k 1,1 -k 2,2n -k 3,3n -k 6,6 -k 7,7n {output.IScluster} > {output.ISclustersorted};
-			bedtools groupby -i {output.ISclustersorted}  -g 8 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,count,sum  | cut -f 2- > {output.IScollapsed};
+			bedtools groupby -i {output.ISclustersorted}  -g 9,7 -c 1,2,3,4,5,6,7,8,8,9 -o distinct,mode,mode,collapse,median,distinct,distinct,sum,count,distinct  | cut -f 3- > {output.IScollapsedSize};
+			bedtools groupby -i {output.IScollapsedSize}  -g 10 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
 			"""
 			
 rule IS_qualitative:
 	input: R1full=rules.Filter_MapR1.output.IScollapsed, 
 		R1alone=rules.Filter_MapR1alone.output.IScollapsed, 
 		R1R2=rules.Filter_MapR1R2.output.IScollapsed
-	output:"13-qualitativeIS/MergedIS.bed"
+	output: merged="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed"
 	message: "Merging and collapsing IS from each step"
 	threads: 8
 	log: "log/qualIS.log"
 	shell: """
-			
+			cat  {input.R1full} {input.R1alone} {input.R1R2} > {output.merged}
 			"""
