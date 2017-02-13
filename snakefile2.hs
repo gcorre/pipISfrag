@@ -1,7 +1,27 @@
+#	This code is a sankemake pipeline integrating different tools to process Illumina 
+#	sequencing paired-end reads for vector Insertion site calling. It provides
+#	file tracking and input/output management.
+#
+
+#	Copyright (C) 2017 GENETHON, Guillaume Corre
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+
 #workdir: "/home/"
-#from snakemake.utils import report
-#TAG="1"
-	
+
 BOWTIE2_INDEX = "/home/references/genomes/homo_sapiens/hg19_GRCh37/index_bowtie2/GRCh37.75"
 
 
@@ -106,7 +126,7 @@ rule mappingR1_full :
 	threads: 8
 	message: "Mapping1 : Mapping with Bowtie2 of R1 reads starting with GCA"
 	shell: """
-			bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --trim3 5 --no-unal --un {output.unmapped} --met-file {log.met} {input} -S {output.mapped} 2> {log.summary}
+			bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --no-unal --un {output.unmapped} --met-file {log.met} {input} -S {output.mapped} 2> {log.summary}
 			"""
 
 rule Filter_MapR1:
@@ -180,7 +200,7 @@ rule cut_TTAAR1R2:
 			
 rule Mapping_R1R2:
 	input: R1=rules.cut_TTAAR1R2.output.qualR1, R2=rules.cut_TTAAR1R2.output.qualR2
-	output: mapped="11-mappingR1R2/{NAME}_TAG{TAG}_mapped.sam", bam="11-mappingR1R2/{NAME}_TAG{TAG}_mapped.bam",sortbam = "11-mappingR1R2/{NAME}_TAG{TAG}_mapped_sorted.sam",  idx="11-mappingR1R2/{NAME}_TAG{TAG}_mapped_sorted.bai"
+	output: mapped="11-mappingR1R2/{NAME}_TAG{TAG}_mapped.sam"
 	message: "Mapping R1 and R2 reads as pairs"
 	params: qual="10"
 	log: met="log/mappingR1R2.log",summary="log/mappingR1R2_numbers.log"
@@ -258,22 +278,33 @@ rule Filter_MapR1alone:
 			IS="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS.bed",
 			ISsorted="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
 			ISsortednum="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
-			IScollapsedSize="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
+			#IScollapsedSize="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
 			IScluster="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
 			ISclustersorted="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
 			IScollapsed="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
 	params: qual="10"
-	message:"Filtering mapped reads, converting to BED,Collapsing by 3nt and counting read abundance by IS"
+	message:"Filtering mapped reads, converting to BED, Collapsing by 3nt and counting read abundance by IS"
 	shell: """ 
 			samtools view -q {params.qual} -bS {input} > {output.bam};
 			samtools sort {output.bam} > {output.sortbam};
 			samtools index {output.sortbam} {output.idx};
 			bedtools bamtobed -i {output.sortbam} > {output.bed};
-			awk 'function abs(a){{return ((a < 0) ? -a : a)}} OFS="\\t" {{split($4,a,"x");print $0,abs($3-$2),a[2]}}' {output.bed} > {output.ISsortednum};
-			awk 'OFS="\\t" {{if($6=="-") {{print $1,$3-1,$3,$4,$5,$6,$7,$8}} else {{print $1,$2,$2+1,$4,$5,$6,$7,$8}}}}' {output.ISsortednum} > {output.IS};
+			awk 'function abs(a){{return ((a < 0) ? -a : a)}} OFS="\\t" {{split($4,a,"x");print $0,a[2]}}' {output.bed} > {output.ISsortednum};
+			awk 'OFS="\\t" {{if($6=="-") {{print $1,$3-1,$3,$4,$5,$6,$7}} else {{print $1,$2,$2+1,$4,$5,$6,$7}}}}' {output.ISsortednum} > {output.IS};
 			bedtools sort -i {output.IS} > {output.ISsorted};
 			bedtools cluster -s  -i {output.ISsorted} > {output.IScluster};
 			sort -k 1,1 -k 2,2n -k 3,3n -k 6,6 -k 7,7n {output.IScluster} > {output.ISclustersorted};
-			bedtools groupby -i {output.ISclustersorted}  -g 9,7 -c 1,2,3,4,5,6,7,8,8,9 -o distinct,mode,mode,collapse,median,distinct,distinct,sum,count,distinct  | cut -f 3- > {output.IScollapsedSize};
-			bedtools groupby -i {output.IScollapsedSize}  -g 10 -c 1,2,3,4,5,6,8,9,7 -o distinct,mode,mode,collapse,median,distinct,sum,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
+			bedtools groupby -i {output.ISclustersorted}  -g 8 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,count,sum  | cut -f 2- > {output.IScollapsed};
+			"""
+			
+rule IS_qualitative:
+	input: R1full=rules.Filter_MapR1.output.IScollapsed, 
+		R1alone=rules.Filter_MapR1alone.output.IScollapsed, 
+		R1R2=rules.Filter_MapR1R2.output.IScollapsed
+	output:"13-qualitativeIS/MergedIS.bed"
+	message: "Merging and collapsing IS from each step"
+	threads: 8
+	log: "log/qualIS.log"
+	shell: """
+			
 			"""
