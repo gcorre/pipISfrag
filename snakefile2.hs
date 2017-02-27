@@ -1,4 +1,4 @@
-#	This code is a sankemake pipeline integrating different tools to process Illumina 
+#	This code is a snakemake pipeline integrating different tools to process Illumina 
 #	sequencing paired-end reads for vector Insertion site calling. It provides
 #	file tracking and input/output management.
 #
@@ -34,7 +34,7 @@ SAMPLE=list(set(FILES))[0];
 TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 
 rule targets:
-	input: "13-qualitativeIS/"+SAMPLE+"_TAG"+TAG+"_qualIS_merged.bed"
+	input: "13-Report/"+SAMPLE+"_TAG"+TAG+"_report.pdf"
 
 	
 rule Demultiplex:
@@ -297,15 +297,43 @@ rule Filter_MapR1alone:
 			bedtools groupby -i {output.ISclustersorted}  -g 9,7 -c 1,2,3,4,5,6,7,8,8,9 -o distinct,mode,mode,collapse,median,distinct,distinct,sum,count,distinct  | cut -f 3- > {output.IScollapsedSize};
 			bedtools groupby -i {output.IScollapsedSize}  -g 10 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
 			"""
-			
+		
+# convert chromosom name from 'x' to 'chrx' for compatibility.
+# sort merged bed file.		
 rule IS_qualitative:
 	input: R1full=rules.Filter_MapR1.output.IScollapsed, 
 		R1alone=rules.Filter_MapR1alone.output.IScollapsed, 
 		R1R2=rules.Filter_MapR1R2.output.IScollapsed
-	output: merged="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed"
+	output: merged=temp("13-qualitativeIS/{NAME}_TAG{TAG}_qualIS.bed"), 
+			merged_corrected="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed",
+			merged_corrected_sorted="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted.bed"
 	message: "Merging and collapsing IS from each step"
 	threads: 8
 	log: "log/qualIS.log"
 	shell: """
-			cat  {input.R1full} {input.R1alone} {input.R1R2} > {output.merged}
+			cat  {input.R1full} {input.R1alone} {input.R1R2} > {output.merged};
+			awk'{{print "chr"$0}}' {output.merged} > {output.merged_corrected};
+			sort -k1,1 -k2,2n -k6,6 {output.merged_corrected} > {output.merged_corrected_sorted}
 			"""
+
+# Overlap IS with epigenetic features and expression data.
+# use bigwig expression dataset or bedgraph.
+	
+rule annotateISEpigenetic:
+	input: rules.IS_qualitative.output.merged
+	output: touch("13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_annotated.bed")
+	shell:
+		"""
+		bigWigAverageOverBed output.bw ../test_tar/13-qualitativeIS/TM024-1-03-library-TAG2_S2_L001_TAG2_qualIS_merged_slop100chr_sub.bed out.stab -stats=stat.ra -bedOut=out.bed -minMax
+		"""
+	
+rule QuantIS:
+	input:R1full=rules.Filter_MapR1.output.IScollapsed,
+		R1R2=rules.Filter_MapR1R2.output.IScollapsed
+	output: touch("13-quantitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed")
+
+	
+rule MakeReport:
+	input: rules.QuantIS.output, rules.IS_qualitative.output.merged, rules.annotateISEpigenetic.output
+	output: touch("13-Report/{NAME}_TAG{TAG}_report.pdf")
+	
