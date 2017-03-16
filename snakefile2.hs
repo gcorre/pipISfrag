@@ -42,7 +42,7 @@ SAMPLE=list(set(FILES))[0];
 TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 
 rule targets:
-	input: "12-Annotation_R1R2/"+SAMPLE+"_TAG"+TAG+"_IS_Collapsed.bed"
+	input: "13-Report/"+SAMPLE+"_TAG"+TAG+"_report.pdf"
 
 rule Demultiplex_TAGS:
 	input: R1="{NAME}_R1_"+TRAILING+".fastq.gz", R2="{NAME}_R2_"+TRAILING+".fastq.gz"
@@ -205,9 +205,9 @@ rule Filter_Map_R1:
 #################################################################################
 # Process paired reads with the linker in R2 but not in R1	
 # Amplicon may be too long to include the complete linker in R1.
-
 # R1 was already trimmed before for LTR and elongation. R2 was already trimmed for the linker before.
-	
+####
+ 
 # look for the reverse-complement Elongation in R2 3'end.
 rule Find_RC_LTR_R2:
 	input: R1=rules.Find_Linker_R2.output.R1Linker,R2=rules.Find_Linker_R2.output.R2Linker
@@ -244,16 +244,39 @@ rule Map_R1_R2_pairs:
 	input: R1=rules.Cut_TTAA_in_R1R2.output.qualR1, R2=rules.Cut_TTAA_in_R1R2.output.qualR2
 	output: mapped="11-mappingR1R2/{NAME}_TAG{TAG}_mapped.sam"
 	message: "Mapping R1 and R2 reads as pairs"
-	params: qual="10"
+	params: 
 	log: met="log/mappingR1R2.log",summary="log/mappingR1R2_numbers.log"
 	threads: 8
 	shell: """
-			bowtie2 -p {threads} -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 5 --no-unal --al-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X 800 --no-mixed --met-file {log.met} 2> {log.summary}
-			
+			bowtie2 -p {threads} -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 5 --no-unal --al-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X 800 --no-mixed --met-file {log.met} 2> {log.summary};
 			"""
 
+#########################################################################
+# Filter out pairs of reads for which the mapping quality score is below 20, meaning p= 0.01 that the reported alignment may occured elsewhere.
+# Then keep only R1 reads from filtered out reads and co
+# 
+			
+rule Filter_Map_R1R2_unique:
+	input: rules.Map_R1_R2_pairs.output.mapped
+	output: badqual = "11-mappingR1R2/{NAME}_TAG{TAG}_bad_qual.sam",confident="11-mappingR1R2/{NAME}_TAG{TAG}_qual_gt20.sam",R1_badqual= "11-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.sam" ,R1_badqualfq= "11-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.fastq"
+	params: qual="20"
+	message: "filtering bad quality alignments that may be multiple hits, keep R1 reads and convert to fastq."
+	log: "log/R1R2_filtering.log"
+	threads :8
+	shell: """
+			samtools view -h -q {params.qual} {input} -o {output.confident} -U {output.badqual};
+			samtools view -h -f 64 {output.badqual} > {output.R1badqual};
+			samtools flagstat {output.R1badqual} > {log};
+			samtools view {output.R1badqual} -b | samtools fastq - > {output.R1_badqualfq};
+
+			"""
+
+#########################################################################
+# Sort SAM alignement by read name and convert to SAM and BED.  
+#  
+# 			
 rule Filter_Map_R1R2:
-	input: sam = rules.Map_R1_R2_pairs.output.mapped
+	input: sam = rules.Filter_Map_R1R2_unique.output.confident
 	output: bam = "12-Annotation_R1R2/{NAME}_TAG{TAG}.bam",
 			bed = "12-Annotation_R1R2/{NAME}_TAG{TAG}.bed",
 			IS= "12-Annotation_R1R2/{NAME}_TAG{TAG}_IS.bed",
@@ -270,15 +293,8 @@ rule Filter_Map_R1R2:
 	message: "Sort SAM by read name, convert to bed, find IS and calculate fragments size from R1 and R2 extremities"
 	shell: """
 			samtools sort {input.sam} -o {output.bam} -O BAM -n;
-			bedtools bamtobed -i {output.bam} > {output.bed};
-			awk '{{ ORS = (NR%2 ? "\\t" : RS) }} 1' {output.bed} | awk 'OFS="\\t" {{if($6=="+"){{print $1,$2,$2+1,substr($4, 1, length($4)-2),$5,$6,$9-$2 }} else {{print $1,$3,$3+1,substr($4, 1, length($4)-2),$5,$6,$3-$8}}}}' > {output.IS};
-			samtools view -bS {input.sam} | samtools sort - -o {output.bam} -O bam;
-			samtools index {output.bam} {output.idx};
-			bedtools sort -i {output.IS} > {output.ISsorted};
-			bedtools cluster -s  -i {output.ISsorted} > {output.IScluster};
-			sort -k 1,1 -k 2,2n -k 3,3n -k 6,6 -k 7,7n {output.IScluster} > {output.ISclustersorted};
-			bedtools groupby -i {output.ISclustersorted}  -g 7,6 -c 1,2,3,4,5,6,7,7,8 -o distinct,mode,mode,collapse,median,distinct,distinct,count,distinct  | cut -f 3- > {output.IScollapsedSize};
-			bedtools groupby -i {output.IScollapsedSize}  -g 9 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
+			bedtools bamtobed -bedpe -mate1 -i {output.bam} > {output.bed}
+			samtools sort {input.sam} -o {output.bam} -O BAM | samtools index {output.bam} {output.idx};
 			"""
 
 ###################################################################################################
@@ -295,10 +311,21 @@ rule Cut_TTAA_R1_noLinker:
 	shell: """
 			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input} > {output.TTAA};
 			  cutadapt -m 20 -o {output.TTAA_cut} {output.TTAA} > {log}
-			"""			
+			"""	
+
+rule Merge_R1alones:
+	input: A=rules.Cut_TTAA_R1_noLinker.output.TTAA_cut, B=rules.Filter_Map_R1R2_unique.output.R1_badqualfq
+	output: "11-R1only/{NAME}_R1_TAG{TAG}_merged.fastq"
+	message: "Merging R1 reads without Linker and R1 from pairs that were mapped multple times."
+	threads:8
+	log: 
+	shell: """
+			cat {input.A} {input.B} > {output} 
+			"""
+	
 			
 rule Collapse_identical_R1_noLinkerReads:
-	input: rules.Cut_TTAA_R1_noLinker.output.TTAA_cut
+	input: rules.Merge_R1alones.output
 	output: file = "10-collapsedR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp_trimmed.fastq"
 	message: "Collapsing identical reads before mapping"
 	log:"log/collapsingR1alone.log"
@@ -318,7 +345,9 @@ rule Map_R1_noLinker:
 				bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --trim3 5 --no-unal --un {output.unmapped} --met-file {log.met} {input.R1} -S {output.mapped} 2> {log.summary}
 				awk -F "\\t" '(/^@/) || ($2==0 && !/XS:i:/ && !/MD:Z:[012][A-Za-z].*\t/) || ($2==16 && !/XS:i:/ && !/MD:Z:.*[A-Za-z][012]\t/) {{print $0}}' {output.mapped} > {output.exact}
 				"""
-				
+			
+
+			
 rule Filter_Map_R1_noLinker:
 	input: rules.Map_R1_noLinker.output.exact
 	output: bam="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped.bam",
@@ -364,6 +393,9 @@ rule QualIS:
 			awk '{{print "chr"$0}}' {output.merged} > {output.merged_corrected};
 			"""
 
+			
+			
+			
 # Add slope to each IS for window based expression calculation.
 # Extract columns 1-4
 # resort because of new ranges
