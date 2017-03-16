@@ -21,11 +21,13 @@
 #
 
 print("#~~~~~~~~Version 03/15/2017~~~~~~~~#");
+print("");
 print("#       #    ##    ######    #######");
-print(" #     #     ##    #         ##   ##");
+print(" #     #     ##    ##        ##   ##");
 print("  #   #      ##    ######    #######");
-print("   # #       ##         #    ##   ##");
+print("   # #       ##        ##    ##   ##");
 print("    #        ##    ######    ##   ##");
+print("");
 print("#~~~~~~~~~~~~~GENETHON~~~~~~~~~~~~~#");
 	
 #workdir: "/home/"
@@ -265,9 +267,9 @@ rule Filter_Map_R1R2_unique:
 	threads :8
 	shell: """
 			samtools view -h -q {params.qual} {input} -o {output.confident} -U {output.badqual};
-			samtools view -h -f 64 {output.badqual} > {output.R1badqual};
-			samtools flagstat {output.R1badqual} > {log};
-			samtools view {output.R1badqual} -b | samtools fastq - > {output.R1_badqualfq};
+			samtools view -h -f 64 {output.badqual} > {output.R1_badqual};
+			samtools flagstat {output.R1_badqual} > {log};
+			samtools view {output.R1_badqual} -b | samtools fastq - > {output.R1_badqualfq};
 
 			"""
 
@@ -296,7 +298,8 @@ rule Filter_Map_R1R2:
 	shell: """
 			samtools sort {input.sam} -o {output.bam} -O BAM -n;
 			bedtools bamtobed -bedpe -mate1 -i {output.bam} > {output.bed};
-			samtools sort {input.sam} -o {output.bam} -O BAM | samtools index {output.bam} {output.idx};
+			samtools sort {input.sam} -o {output.bam} -O BAM;
+			samtools index {output.bam} {output.idx};
 			awk 'OFS="\\t" {{if($9=="+"){{print $1,$2,$2+1,$7,$8,$9, $6-$2}} else {{print $1,$3,$3+1,$7,$8,$9,$3-$5}}}}' {output.bed} > {output.IS};
 			bedtools sort -i {output.IS} > {output.ISsorted};
 			bedtools cluster -s -d -1 -i {output.ISsorted} > {output.IScluster};
@@ -334,7 +337,7 @@ rule Merge_R1alones:
 			
 rule Collapse_identical_R1_noLinkerReads:
 	input: rules.Merge_R1alones.output
-	output: file = "10-collapsedR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp_trimmed.fastq"
+	output: file = "10-collapsedR1alone/{NAME}_R1_TAG{TAG}_merged_trimmed.fastq"
 	message: "Collapsing identical reads before mapping"
 	log:"log/collapsingR1alone.log"
 	shell: """
@@ -385,6 +388,8 @@ rule Filter_Map_R1_noLinker:
 			bedtools groupby -i {output.IScollapsedSize}  -g 10 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
 			"""
 		
+		
+		
 # convert chromosom name from 'x' to 'chrx' for compatibility.
 # sort merged bed file.		
 rule QualIS:
@@ -410,16 +415,16 @@ rule QualIS:
 # Overlap IS with epigenetic features and expression data.
 # use bigwig expression dataset or bedgraph.
 	
-rule annotateISEpigenetic:
-	input: rules.QualIS.output.merged_corrected
-	output: slop="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_slop400.bed",slopsorted="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_slop400_sorted.bed",bigCoverage = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_H3K27me3.stab",bedcoverage = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_H3K27me3.bed"
-	log: "log/H3K27me3.log"
-	shell:
-		"""
-		bedtools slop -i {input} -g ../references/hg19.chrom.sizes -b 200 | cut -f 1-4 > {output.slop};
-		sort -k1,1 -k2,2n -k6,6 {output.slop} > {output.slopsorted}
-		bigWigAverageOverBed ../dataset/epigenetics/GSM621664_BI.Mobilized_CD34_Primary_Cells.H3K27me3.UW_RO_01536.bw {output.slopsorted} {output.bigCoverage} -stats={log} -bedOut={output.bedcoverage} -minMax
-		"""
+#rule annotateISEpigenetic:
+#	input: rules.QualIS.output.merged_corrected
+#	output: slop="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_slop400.bed",slopsorted="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_slop400_sorted.bed",bigCoverage = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_H3K27me3.stab",bedcoverage = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_H3K27me3.bed"
+#	log: "log/H3K27me3.log"
+#	shell:
+#		"""
+#		bedtools slop -i {input} -g ../references/hg19.chrom.sizes -b 200 | cut -f 1-4 > {output.slop};
+#		sort -k1,1 -k2,2n -k6,6 {output.slop} > {output.slopsorted};
+#		#bigWigAverageOverBed ../dataset/epigenetics/GSM621664_BI.Mobilized_CD34_Primary_Cells.H3K27me3.UW_RO_01536.bw {output.slopsorted} {output.bigCoverage} -stats={log} -bedOut={output.bedcoverage} -minMax
+#		"""
 	
 rule QuantIS:
 	input:R1full=rules.Filter_Map_R1.output.IScollapsed,
@@ -428,6 +433,6 @@ rule QuantIS:
 
 	
 rule MakeReport:
-	input: rules.QuantIS.output, rules.QualIS.output.merged_corrected, rules.annotateISEpigenetic.output.bedcoverage
+	input: rules.QuantIS.output, rules.QualIS.output.merged_corrected
 	output: touch("13-Report/{NAME}_TAG{TAG}_report.pdf")
 	
