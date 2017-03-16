@@ -249,6 +249,7 @@ rule Map_R1_R2_pairs:
 	threads: 8
 	shell: """
 			bowtie2 -p {threads} -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 5 --no-unal --al-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X 800 --no-mixed --met-file {log.met} 2> {log.summary}
+			
 			"""
 
 rule Filter_Map_R1R2:
@@ -280,22 +281,25 @@ rule Filter_Map_R1R2:
 			bedtools groupby -i {output.IScollapsedSize}  -g 9 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
 			"""
 
-			
-			
-			
+###################################################################################################
+# Process R1 reads that do not contain the linker sequence nor in their R2 counterpart
+# These reads are only use for a qualitative anaylsis of IS, not for the quantification.	
+	
+## This step will be removed when using the sonication method	
 rule Cut_TTAA_R1_noLinker:
 	input: rules.Find_Linker_R2.output.R1noLinker
-	output: TTAA="08-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq"
-	message: "Cutting TTAA sequences that are still present"
+	output: TTAA="08-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq",TTAA_cut="08-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp.fastq"
+	message: "Cutting TTAA sequences that are still present and filter reads shorter than 20bp"
 	threads: 8
 	log: "log/TTAAR1alone.log"
 	shell: """
-			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input} > {output.TTAA}
+			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input} > {output.TTAA};
+			  cutadapt -m 20 -o {output.TTAA_cut} {output.TTAA} > {log}
 			"""			
 			
 rule Collapse_identical_R1_noLinkerReads:
-	input: rules.Cut_TTAA_R1_noLinker.output.TTAA
-	output: file = "10-collapsedR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut_trimmed.fastq"
+	input: rules.Cut_TTAA_R1_noLinker.output.TTAA_cut
+	output: file = "10-collapsedR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp_trimmed.fastq"
 	message: "Collapsing identical reads before mapping"
 	log:"log/collapsingR1alone.log"
 	shell: """
@@ -306,16 +310,17 @@ rule Collapse_identical_R1_noLinkerReads:
 			
 rule Map_R1_noLinker:
 		input: R1=rules.Collapse_identical_R1_noLinkerReads.output.file
-		output: mapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_mapped.sam",unmapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_unmapped.fastq"
+		output: mapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_mapped.sam",unmapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_unmapped.fastq", exact="11-mappingR1alone/{NAME}_R1_TAG{TAG}_mapped_exact.sam"
 		message:"Mapping R1 reads without Linker in R1 nor R2"
 		threads: 8
 		log: met="log/mappingR1alone.log",summary="log/mappingR1alone_numbers.log"
 		shell: """
 				bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --trim3 5 --no-unal --un {output.unmapped} --met-file {log.met} {input.R1} -S {output.mapped} 2> {log.summary}
+				awk -F "\\t" '(/^@/) || ($2==0 && !/XS:i:/ && !/MD:Z:[012][A-Za-z].*\t/) || ($2==16 && !/XS:i:/ && !/MD:Z:.*[A-Za-z][012]\t/) {{print $0}}' {output.mapped} > {output.exact}
 				"""
 				
 rule Filter_Map_R1_noLinker:
-	input: rules.Map_R1_noLinker.output.mapped
+	input: rules.Map_R1_noLinker.output.exact
 	output: bam="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped.bam",
 			sortbam="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
 			idx="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
