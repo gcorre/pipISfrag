@@ -272,9 +272,11 @@ rule Filter_Map_R1R2_unique:
 			"""
 
 #########################################################################
-# Sort SAM alignement by read name and convert to SAM and BED.  
-#  
-# 			
+# Sort SAM alignement by read name and convert to SAM then BEDPE with mate1 first for reproductibility of filtering steps.  
+# Sort sam by position and make an index for IGV .
+# Extract IS position, fragment length from BEDPE.
+
+
 rule Filter_Map_R1R2:
 	input: sam = rules.Filter_Map_R1R2_unique.output.confident
 	output: bam = "12-Annotation_R1R2/{NAME}_TAG{TAG}.bam",
@@ -293,8 +295,14 @@ rule Filter_Map_R1R2:
 	message: "Sort SAM by read name, convert to bed, find IS and calculate fragments size from R1 and R2 extremities"
 	shell: """
 			samtools sort {input.sam} -o {output.bam} -O BAM -n;
-			bedtools bamtobed -bedpe -mate1 -i {output.bam} > {output.bed}
+			bedtools bamtobed -bedpe -mate1 -i {output.bam} > {output.bed};
 			samtools sort {input.sam} -o {output.bam} -O BAM | samtools index {output.bam} {output.idx};
+			awk 'OFS="\\t" {{if($9=="+"){{print $1,$2,$2+1,$7,$8,$9, $6-$2}} else {{print $1,$3,$3+1,$7,$8,$9,$3-$5}}}}' {output.bed} > {output.IS};
+			bedtools sort -i {output.IS} > {output.ISsorted};
+			bedtools cluster -s -d -1 -i {output.ISsorted} > {output.IScluster};
+			sort -k 8,8n -k 7,7n {output.IScluster} > {output.ISclustersorted};
+			bedtools groupby -i {output.ISclustersorted} -g 8,7 -c 1,2,3,4,5,6,7,7,8 -o distinct,mode,mode,collapse,median,distinct,distinct,count,distinct  | cut -f 3- > {output.IScollapsedSize};
+			bedtools groupby -i {output.IScollapsedSize} -g 9 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
 			"""
 
 ###################################################################################################
