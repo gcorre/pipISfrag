@@ -75,7 +75,7 @@ rule Find_LTR:
 	shell: """
 			cutadapt -g GTCTGTTGTGTGACTCTGGTAAC -m 20 -O 23 -e 0.1 --no-indels -o {output.R1LTR} -p {output.R2LTR} --untrimmed-paired-output {output.R2noLTR} --untrimmed-output {output.R1noLTR} {input.R1} {input.R2} > {log}
 			"""
-	
+
 rule Find_Elong:
 	input: R1=rules.Find_LTR.output.R1LTR, R2=rules.Find_LTR.output.R2LTR
 	output: R1elong="04-ELONG/{NAME}_R1_TAG{TAG}_Elong.fastq", R2elong="04-ELONG/{NAME}_R2_TAG{TAG}_Elong.fastq", R1noelong="04-ELONG/{NAME}_R1_TAG{TAG}_noElong.fastq", R2noelong="04-ELONG/{NAME}_R2_TAG{TAG}_noElong.fastq",
@@ -104,7 +104,7 @@ rule Find_Linker_R1:
 	shell: """
 			cutadapt -a GTCCCTTAAGCGGAGCCCT -m 20 -O 8 -e 0.2 --no-indels -o {output.R1Linker} -p {output.R2Linker} --untrimmed-paired-output {output.R2noLinker} --untrimmed-output {output.R1noLinker} {input.R1} {input.R2} > {log}
 			"""	
-			
+ 	
 rule Find_Linker_R2:
 	input: R1=rules.Find_Linker_R1.output.R1noLinker, R2=rules.Find_Linker_R1.output.R2noLinker
 	output: R1Linker="06-LinkerR2/{NAME}_R1_TAG{TAG}_Linker.fastq", R2Linker="06-LinkerR2/{NAME}_R2_TAG{TAG}_Linker.fastq", R1noLinker="06-LinkerR2/{NAME}_R1_TAG{TAG}_noLinker.fastq", R2noLinker="06-LinkerR2/{NAME}_R2_TAG{TAG}_noLinker.fastq"
