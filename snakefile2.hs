@@ -34,6 +34,8 @@ print("#~~~~~~~~~~~~~GENETHON~~~~~~~~~~~~~#");
 
 BOWTIE2_INDEX = "/home/references/genomes/homo_sapiens/hg19_GRCh37/index_bowtie2/GRCh37.75"
 
+from datetime import date
+TODAY=str(date.today())
 
 from glob import glob;
 FILES = glob('*_R[0-9]_*.fastq.gz');
@@ -44,7 +46,7 @@ SAMPLE=list(set(FILES))[0];
 TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 
 rule targets:
-	input: "13-Report/"+SAMPLE+"_TAG"+TAG+"_report.pdf"
+	input: "13-Report/"+SAMPLE+"_TAG"+TAG+"_report.pdf","../dataset/UCSC/hg19/"+TODAY+"/"
 
 rule Demultiplex_TAGS:
 	input: R1="{NAME}_R1_"+TRAILING+".fastq.gz", R2="{NAME}_R2_"+TRAILING+".fastq.gz"
@@ -414,22 +416,17 @@ rule QualIS:
 			"""
 	
 			
-# Add slope to each IS for window based expression calculation.
-# Extract columns 1-4
-# resort because of new ranges
-# Overlap IS with epigenetic features and expression data.
-# use bigwig expression dataset or bedgraph.
-	
-#rule annotateISEpigenetic:
-#	input: rules.QualIS.output.merged_corrected
-#	output: slop="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_slop400.bed",slopsorted="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_slop400_sorted.bed",bigCoverage = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_H3K27me3.stab",bedcoverage = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_H3K27me3.bed"
-#	log: "log/H3K27me3.log"
-#	shell:
-#		"""
-#		bedtools slop -i {input} -g ../references/hg19.chrom.sizes -b 200 | cut -f 1-4 > {output.slop};
-#		sort -k1,1 -k2,2n -k6,6 {output.slop} > {output.slopsorted};
-#		#bigWigAverageOverBed ../dataset/epigenetics/GSM621664_BI.Mobilized_CD34_Primary_Cells.H3K27me3.UW_RO_01536.bw {output.slopsorted} {output.bigCoverage} -stats={log} -bedOut={output.bedcoverage} -minMax
-#		"""
+
+rule annotateIS_:
+	input: rules.QualIS.output.merged_corrected
+	output: slop="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_slop400.bed",slopsorted="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_slop400_sorted.bed",bigCoverage = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_H3K27me3.stab",bedcoverage = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_H3K27me3.bed"
+	log: "log/H3K27me3.log"
+	shell:
+		"""
+		bedtools slop -i {input} -g ../references/hg19.chrom.sizes -b 200 | cut -f 1-4 > {output.slop};
+		sort -k1,1 -k2,2n -k6,6 {output.slop} > {output.slopsorted};
+		#bigWigAverageOverBed ../dataset/epigenetics/GSM621664_BI.Mobilized_CD34_Primary_Cells.H3K27me3.UW_RO_01536.bw {output.slopsorted} {output.bigCoverage} -stats={log} -bedOut={output.bedcoverage} -minMax
+		"""
 	
 rule QuantIS:
 	input:R1full=rules.Filter_Map_R1.output.IScollapsed,
@@ -440,4 +437,16 @@ rule QuantIS:
 rule MakeReport:
 	input: rules.QuantIS.output, rules.QualIS.output.merged_sorted_collapsed
 	output: touch("13-Report/{NAME}_TAG{TAG}_report.pdf")
+	
+	
+rule GetAnnotations_UCSC_HGNC:
+	input: 
+	output: HGNC="../dataset/UCSC/hg19/"+TODAY+"/HGNC_.txt",UCSC="../dataset/UCSC/hg19/"+TODAY+"/"
+	log: "../dataset/UCSC/hg19/"+TODAY+"/ucsc_remote_wget.log"
+	shell : """
+			perl ../Scripts/retreive_HUGO.pl > {output.HGNC};
+			wget -N -i ../Scripts/hg19_annotation_urls.txt -P {output.UCSC} -o {log} -x;
+			"""
+			
+	
 	
