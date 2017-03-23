@@ -36,7 +36,7 @@ BOWTIE2_INDEX = "/home/references/genomes/homo_sapiens/hg19_GRCh37/index_bowtie2
 
 
 from glob import glob;
-FILES = glob('*R[0-9]_[0-9]*.fastq.gz');
+FILES = glob('*_R[0-9]_*.fastq.gz');
 import re;
 TRAILING=list(set([re.search('_([0-9]+).fastq.gz',FILES[0]).group(1) for w in FILES]))[0]
 FILES=[re.sub('_R[1-2]_[0-9]+.fastq.gz', '',w) for w in FILES];
@@ -122,21 +122,21 @@ rule Find_Linker_R2:
 ####
 # This step will be removed when using the sonication method. Just here to compare with VISA-MseI
 ####
-rule Cut_TTAA:
-	input: rules.Find_Linker_R1.output.R1Linker
-	output: TTAA="08-TTAA_cut/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq",TTAA_cut="08-TTAA_cut/{NAME}_R1_TAG{TAG}_TTAA-cut20bp.fastq"
-	message: "Cutting TTAA sequences that are still present and remove sequences that are too short"
-	threads: 8
-	log: "log/TTAA.log"
-	shell: """
-			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input} > {output.TTAA}
-			  cutadapt -m 20 -o {output.TTAA_cut} {output.TTAA} > {log}
-			"""			
+#rule Cut_TTAA:
+#	input: rules.Find_Linker_R1.output.R1Linker
+#	output: TTAA="08-TTAA_cut/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq",TTAA_cut="08-TTAA_cut/{NAME}_R1_TAG{TAG}_TTAA-cut20bp.fastq"
+#	message: "Cutting TTAA sequences that are still present and remove sequences that are too short"
+#	threads: 8
+#	log: "log/TTAA.log"
+#	shell: """
+#			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input} > {output.TTAA}
+#			  cutadapt -m 20 -o {output.TTAA_cut} {output.TTAA} > {log}
+#			"""			
 
 			
 rule Collapse_identical_reads:
-	input: rules.Cut_TTAA.output.TTAA_cut
-	output: file = "10-collapsed/{NAME}_R1_TAG{TAG}_TTAA-cut20bp_trimmed.fastq"
+	input: rules.Find_Linker_R1.output.R1Linker
+	output: file = "10-collapsed/{NAME}_R1_TAG{TAG}_Linker_trimmed.fastq"
 	message: "Collapsing identical reads before mapping"
 	log:"log/collapsingR1.log"
 	shell: """
@@ -219,38 +219,40 @@ rule Find_RC_LTR_R2:
 	threads: 8
 	message: "Trimming R2 that have LTR"
 	shell: """
-			cutadapt -a TGCTAGAGATTTTCCACACTGACTAAAAGGGTCTGAGGGATCTCTA -O 8 -m 20 -e 0.25 -o {output.trimmedLTRRCR2} -p {output.trimmedLTRRCR1} {input.R2} {input.R1} > {log};
+			cutadapt -a TGCTAGAGATTTTCCACACTGACTAAAAGGGTCTGAGGGATCTCTA -q 20 -O 8 -m 20 -e 0.25 -o {output.trimmedLTRRCR2} -p {output.trimmedLTRRCR1} {input.R2} {input.R1} > {log};
 			"""	
 			
 ####
 # This step will be removed when moving to the sonication method.
 		
-rule Cut_TTAA_in_R1R2:
-	input: R1=rules.Find_RC_LTR_R2.output.trimmedLTRRCR1,R2=rules.Find_RC_LTR_R2.output.trimmedLTRRCR2
-	output: TTAAR1="10-TTAA_cut/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq", 
-			TTAAR2="10-TTAA_cut/{NAME}_R2_TAG{TAG}_TTAA-cut.fastq",
-			qualR1="10-TTAA_cut/{NAME}_R1_TAG{TAG}.fastq",
-			qualR2="10-TTAA_cut/{NAME}_R2_TAG{TAG}.fastq"
+#rule Cut_TTAA_in_R1R2:
+	#input: R1=rules.Find_RC_LTR_R2.output.trimmedLTRRCR1,R2=rules.Find_RC_LTR_R2.output.trimmedLTRRCR2
+#	output: TTAAR1="10-TTAA_cut/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq", 
+	#		TTAAR2="10-TTAA_cut/{NAME}_R2_TAG{TAG}_TTAA-cut.fastq",
+#			qualR1="10-TTAA_cut/{NAME}_R1_TAG{TAG}.fastq",
+#			qualR2="10-TTAA_cut/{NAME}_R2_TAG{TAG}.fastq"
 			
-	message: "Cutting TTAA sequences that are still present, trimming low quality 3'"
-	threads: 8
-	log: "log/TTAAR1R2_quality.log"
-	shell: """
-			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input.R1} > {output.TTAAR1};
-			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input.R2} > {output.TTAAR2};
-			  cutadapt -q 20 -m 20 -A XXXXXXX -o {output.qualR1} -p {output.qualR2} {output.TTAAR1} {output.TTAAR2} > {log};
-			"""	
+#	message: "Cutting TTAA sequences that are still present, trimming low quality 3'"
+#	threads: 8
+	#log: "log/TTAAR1R2_quality.log"
+#	shell: """
+#			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input.R1} > {output.TTAAR1};
+#			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input.R2} > {output.TTAAR2};
+#			  cutadapt -q 20 -m 20 -A XXXXXXX -o {output.qualR1} -p {output.qualR2} {output.TTAAR1} {output.TTAAR2} > {log};
+#			"""	
 
-			
+####################################################
+# Mapped paired end reads, trim 3' end to remove uncut linker parts, tolerate dovetail and max fragments length 800bp. Keep only concordant mapping (same Chr, <800bp).		
+	
 rule Map_R1_R2_pairs:
-	input: R1=rules.Cut_TTAA_in_R1R2.output.qualR1, R2=rules.Cut_TTAA_in_R1R2.output.qualR2
-	output: mapped="11-mappingR1R2/{NAME}_TAG{TAG}_mapped.sam"
+	input: R1=rules.Find_RC_LTR_R2.output.trimmedLTRRCR1, R2=rules.Find_RC_LTR_R2.output.trimmedLTRRCR2
+	output: mapped="11-mappingR1R2/{NAME}_TAG{TAG}_mapped.sam", R1unal="11-mappingR1R2/{NAME}_R1_TAG{TAG}_unaligned.fastq"
 	message: "Mapping R1 and R2 reads as pairs"
-	params: 
+	params: fragLenght="800", Trim3="5"
 	log: met="log/mappingR1R2.log",summary="log/mappingR1R2_numbers.log"
 	threads: 8
 	shell: """
-			bowtie2 -p {threads} -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 5 --no-unal --al-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X 800 --no-mixed --met-file {log.met} 2> {log.summary};
+			bowtie2 -p {threads} -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 {params.Trim3} --no-unal --al-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X {params.fragLenght} --no-mixed --met-file {log.met} 2> {log.summary};
 			"""
 
 #########################################################################
@@ -270,9 +272,8 @@ rule Filter_Map_R1R2_unique:
 			samtools view -h -f 64 {output.badqual} > {output.R1_badqual};
 			samtools flagstat {output.R1_badqual} > {log};
 			samtools view {output.R1_badqual} -b | samtools fastq - > {output.R1_badqualfq};
-
 			"""
-
+			
 #########################################################################
 # Sort SAM alignement by read name and convert to SAM then BEDPE with mate1 first for reproductibility of filtering steps.  
 # Sort sam by position and make an index for IGV .
@@ -311,10 +312,22 @@ rule Filter_Map_R1R2:
 ###################################################################################################
 # Process R1 reads that do not contain the linker sequence nor in their R2 counterpart
 # These reads are only use for a qualitative anaylsis of IS, not for the quantification.	
+
+rule Merge_R1alones:
+	input: A=rules.Find_Linker_R2.output.R1noLinker, B=rules.Filter_Map_R1R2_unique.output.R1_badqualfq, C = rules.Map_R1_R2_pairs.output.R1unal, D=rules.Map_R1_with_Linker.output.unmapped
+	output: "11-R1only/{NAME}_R1_TAG{TAG}_merged.fastq"
+	message: "Merging R1 reads without Linker and R1 from pairs that were mapped multiple times and R1 reads from pairs that do not map concordantly."
+	threads:8
+	log: 
+	shell: """
+			cat {input.A} {input.B} {input.C} {input.D} > {output} 
+			"""
+			
+			
+## This step will be removed when using the sonication method.
 	
-## This step will be removed when using the sonication method	
 rule Cut_TTAA_R1_noLinker:
-	input: rules.Find_Linker_R2.output.R1noLinker
+	input: rules.Merge_R1alones.output
 	output: TTAA="08-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq",TTAA_cut="08-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp.fastq"
 	message: "Cutting TTAA sequences that are still present and filter reads shorter than 20bp"
 	threads: 8
@@ -323,21 +336,10 @@ rule Cut_TTAA_R1_noLinker:
 			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input} > {output.TTAA};
 			  cutadapt -m 20 -o {output.TTAA_cut} {output.TTAA} > {log}
 			"""	
-
-rule Merge_R1alones:
-	input: A=rules.Cut_TTAA_R1_noLinker.output.TTAA_cut, B=rules.Filter_Map_R1R2_unique.output.R1_badqualfq
-	output: "11-R1only/{NAME}_R1_TAG{TAG}_merged.fastq"
-	message: "Merging R1 reads without Linker and R1 from pairs that were mapped multple times."
-	threads:8
-	log: 
-	shell: """
-			cat {input.A} {input.B} > {output} 
-			"""
-	
 			
 rule Collapse_identical_R1_noLinkerReads:
-	input: rules.Merge_R1alones.output
-	output: file = "10-collapsedR1alone/{NAME}_R1_TAG{TAG}_merged_trimmed.fastq"
+	input: rules.Cut_TTAA_R1_noLinker.output.TTAA_cut
+	output: file = "10-collapsedR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp_trimmed.fastq"
 	message: "Collapsing identical reads before mapping"
 	log:"log/collapsingR1alone.log"
 	shell: """
@@ -391,23 +393,26 @@ rule Filter_Map_R1_noLinker:
 		
 		
 # convert chromosom name from 'x' to 'chrx' for compatibility.
-# sort merged bed file.		
+# sort merged bed file and collapse IS at the same position.
+	
 rule QualIS:
 	input: R1full=rules.Filter_Map_R1.output.IScollapsed, 
 		R1alone=rules.Filter_Map_R1_noLinker.output.IScollapsed, 
 		R1R2=rules.Filter_Map_R1R2.output.IScollapsed
 	output: merged=temp("13-qualitativeIS/{NAME}_TAG{TAG}_qualIS.bed"), 
-			merged_corrected="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed"
+			merged_corrected="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed",
+			merged_sorted = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted.bed",
+			merged_sorted_collapsed= "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted_collapsed.bed"
 	message: "Merging and collapsing IS from each step"
 	threads: 8
 	log: "log/qualIS.log"
 	shell: """
 			cat  {input.R1full} {input.R1alone} {input.R1R2} > {output.merged};
 			awk '{{print "chr"$0}}' {output.merged} > {output.merged_corrected};
+			sort -k1,1 -k2,2n {output.merged_corrected} > {output.merged_sorted};
+			bedtools merge -s -d -1 -c 1,2,3,4,5,6,7 -o distinct,mode,mode,collapse,median,distinct,sum -i {output.merged_sorted} | cut -f 5- > {output.merged_sorted_collapsed};
 			"""
-
-			
-			
+	
 			
 # Add slope to each IS for window based expression calculation.
 # Extract columns 1-4
@@ -433,6 +438,6 @@ rule QuantIS:
 
 	
 rule MakeReport:
-	input: rules.QuantIS.output, rules.QualIS.output.merged_corrected
+	input: rules.QuantIS.output, rules.QualIS.output.merged_sorted_collapsed
 	output: touch("13-Report/{NAME}_TAG{TAG}_report.pdf")
 	
