@@ -46,7 +46,11 @@ SAMPLE=list(set(FILES))[0];
 TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 
 rule targets:
-	input: "13-Report/"+SAMPLE+"_TAG"+TAG+"_report.pdf","../dataset/UCSC/hg19/"+TODAY+"/"
+	input: "../dataset/UCSC/hg19/"+TODAY+"/refFlatDistProm-1000-200.bed"
+#"13-Report/"+SAMPLE+"_TAG"+TAG+"_report.pdf",
+
+
+
 
 rule Demultiplex_TAGS:
 	input: R1="{NAME}_R1_"+TRAILING+".fastq.gz", R2="{NAME}_R2_"+TRAILING+".fastq.gz"
@@ -443,10 +447,29 @@ rule GetAnnotations_UCSC_HGNC:
 	input: 
 	output: HGNC="../dataset/UCSC/hg19/"+TODAY+"/HGNC_.txt",UCSC="../dataset/UCSC/hg19/"+TODAY+"/"
 	log: "../dataset/UCSC/hg19/"+TODAY+"/ucsc_remote_wget.log"
+	message: "Downloading annotation from UCSC"
 	shell : """
 			perl ../Scripts/retreive_HUGO.pl > {output.HGNC};
-			wget -N -i ../Scripts/hg19_annotation_urls.txt -P {output.UCSC} -o {log} -x;
+			xargs -i wget -o {log} -P {output.UCSC} '{{}}'  < ../Scripts/hg19_annotation_urls.txt;
+			gunzip {output.UCSC}/*.gz
 			"""
-			
+
+						
+rule FormatAnnotation:
+	input: refFlat=rules.GetAnnotations_UCSC_HGNC.output.UCSC+"refGene.txt",
+			gensize= "../dataset/UCSC/hg19/"+TODAY+"/hg19.chrom.sizes"
+	output: reflatBed="../dataset/UCSC/hg19/"+TODAY+"/refFlat.bed",
+			reflatTSS="../dataset/UCSC/hg19/"+TODAY+"/refFlatTSS.bed",
+			reflatCore="../dataset/UCSC/hg19/"+TODAY+"/refFlatCoreProm-40-TSS.bed",
+			reflatProx="../dataset/UCSC/hg19/"+TODAY+"/refFlatProxProm-200-40bp.bed",
+			reflatDist="../dataset/UCSC/hg19/"+TODAY+"/refFlatDistProm-1000-200.bed"
+	log:
+	shell: """
+			awk 'OFS="\\t" {{print $3,$5,$6,$2,0,$4}}' {input.refFlat} > {output.reflatBed};
+			awk 'OFS="\\t" {{if($6 == "+") {{print $1,$2,$2+1,$4,$5,$6}} else {{print $1,$3-1,$3,$4,$5,$6}}}}' {output.reflatBed} > {output.reflatTSS};
+			bedtools flank -s -l 40 -r 0 -g {input.gensize} -i {output.reflatTSS} > {output.reflatCore};
+			bedtools flank -s -l 160 -r 0 -g {input.gensize} -i {output.reflatCore} > {output.reflatProx};
+			bedtools flank -s -l 800 -r 0 -g {input.gensize} -i {output.reflatProx} > {output.reflatDist};
+			"""
 	
 	
