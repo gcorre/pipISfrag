@@ -35,8 +35,8 @@ print("#~~~~~~~~~~~~~GENETHON~~~~~~~~~~~~~#");
 BOWTIE2_INDEX = "/home/references/genomes/homo_sapiens/hg19_GRCh37/index_bowtie2/GRCh37.75"
 
 from datetime import date
-#TODAY=str(date.today())
-TODAY="2017-03-24"
+TODAY=str(date.today())
+#TODAY="2017-03-24"
 
 from glob import glob;
 FILES = glob('*_R[0-9]_*.fastq.gz');
@@ -51,9 +51,8 @@ TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 rule targets:
 	input: "13-Report/"+SAMPLE+"_TAG"+TAG+"_report.pdf"
 
-
-
-
+	
+	
 rule Demultiplex_TAGS:
 	input: R1="{NAME}_R1_"+TRAILING+".fastq.gz", R2="{NAME}_R2_"+TRAILING+".fastq.gz"
 	output: R1="01-Demultiplex/{NAME}_R1_TAG{TAG}.fastq.gz",R2="01-Demultiplex/{NAME}_R2_TAG{TAG}.fastq.gz"
@@ -419,40 +418,87 @@ rule QuantIS:
 			cat {input.R1full} {input.R1R2} > {output.merged}
 			bedtools sort -i {output.merged} | bedtools merge -d -1 -s -c 7,8 -o sum,count_distinct -i - > {output.collapsed}
 			"""
-
+			
+			
+			
+			
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+# Download annotation files from different sources	: UCSC known genes, Ensembl genes, Refseq Genes, GencodeV19 and the HGNC gene symbol database
+#
+############################################################################
 	
-
-	
-	
-rule GetAnnotations_UCSC_HGNC:
+rule GetAnnotations_UCSC:
 	input: 
-	output: HGNC="../dataset/UCSC/hg19/"+TODAY+"/HGNC.txt",UCSC="../dataset/UCSC/hg19/"+TODAY+"/"
+	output: folder = "../dataset/UCSC/hg19/"+TODAY+"/"
 	log: "../dataset/UCSC/hg19/"+TODAY+"/ucsc_remote_wget.log"
 	message: "Downloading annotation from UCSC"
 	shell : """
+			xargs -i wget -o {log} -P {output.folder} '{{}}'  < ../Scripts/hg19_annotationUCSC_urls.txt;
+			gunzip {output}/*.gz
+			"""
+			
+rule GetAnnotations_HGNC:
+	input: 
+	output: HGNC ="../dataset/HGNC/hg19/"+TODAY+"/HGNC.txt"
+	message: "Downloading annotation from HGNC"
+	shell : """
 			perl ../Scripts/retreive_HUGO.pl > {output.HGNC};
-			xargs -i wget -o {log} -P {output.UCSC} '{{}}'  < ../Scripts/hg19_annotation_urls.txt;
-			gunzip {output.UCSC}/*.gz
+			"""
+			
+rule GetAnnotations_Ensembl:	
+	input:
+	output: folder ="../dataset/Ensembl/hg19/"+TODAY+"/"
+	log: "../dataset/Ensembl/hg19/"+TODAY+"/Ensembl_remote_wget.log"
+	message: "Downloading annotation from Ensembl"
+	shell:"""
+			xargs -i wget -o {log} -P {output.folder} '{{}}'  < ../Scripts/hg19_annotationEnsembl_urls.txt;
+			gunzip {output}/*.gz
 			"""
 
-##############################################################################
+rule GetAnnotations_RefSeq:
+	input: 
+	output: folder = "../dataset/RefSeq/hg19/"+TODAY+"/", refFlat = "../dataset/RefSeq/hg19/"+TODAY+"/refFlat.txt", ChrSize="../dataset/RefSeq/hg19/"+TODAY+"/hg19.chrom.sizes"
+	log: "../dataset/RefSeq/hg19/"+TODAY+"/RefSeq_remote_wget.log"
+	message: "Downloading annotation from RefSeq"
+	shell: """
+			mkdir {output.folder};
+			xargs -i wget -o {log} -P {output.folder} '{{}}'  < ../Scripts/hg19_annotationRefSeq_urls.txt;
+			gunzip {output}/*.gz
+			"""
+			
+rule GetAnnotations_GenCode:
+	input: 
+	output:older = "../dataset/GencodeV19/hg19/"+TODAY+"/"
+	log: "../dataset/GencodeV19/hg19/"+TODAY+"/Gencode_remote_wget.log"
+	message: "Downloading annotation from GencodeV19"
+	shell: """
+			xargs -i wget -o {log} -P {output.folder} '{{}}'  < ../Scripts/hg19_annotationGencodeV19_urls.txt;
+			gunzip {output}/*.gz
+			"""	
+			
+############################################################################
+############################################################################
+############################################################################
+############################################################################
 # Convert refFlat table to bed, convert exon start-end to bed with exon rank in transcript numbered according to strand !!!!!
 
 						
-rule FormatAnnotation:
-	input: refFlat=rules.GetAnnotations_UCSC_HGNC.output.UCSC+"refFlat.txt", anFolder=rules.GetAnnotations_UCSC_HGNC.output.UCSC,
-			gensize= "../dataset/UCSC/hg19/"+TODAY+"/hg19.chrom.sizes"
-	output: reflatBed="../dataset/UCSC/hg19/"+TODAY+"/refFlat.bed",
-			reflatTSS=("../dataset/UCSC/hg19/"+TODAY+"/refFlatTSS.bed"),
-			reflatTSSSorted="../dataset/UCSC/hg19/"+TODAY+"/refFlatTSSsorted.bed",
-			reflatCore="../dataset/UCSC/hg19/"+TODAY+"/refFlatCoreProm.bed",
-			reflatProx="../dataset/UCSC/hg19/"+TODAY+"/refFlatProxProm.bed",
-			reflatDist="../dataset/UCSC/hg19/"+TODAY+"/refFlatDistProm.bed",
-			reflatExons="../dataset/UCSC/hg19/"+TODAY+"/refFlatExons.bed"
+rule FormatAnnotationRefSeq:
+	input: refFlat=rules.GetAnnotations_RefSeq.output.refFlat, gensize= rules.GetAnnotations_RefSeq.output.ChrSize
+	output: reflatBed="../dataset/RefSeq/hg19/"+TODAY+"/refFlat.bed",
+			reflatTSS=("../dataset/RefSeq/hg19/"+TODAY+"/refFlatTSS.bed"),
+			reflatTSSSorted="../dataset/RefSeq/hg19/"+TODAY+"/refFlatTSSsorted.bed",
+			reflatCore="../dataset/RefSeq/hg19/"+TODAY+"/refFlatCoreProm.bed",
+			reflatProx="../dataset/RefSeq/hg19/"+TODAY+"/refFlatProxProm.bed",
+			reflatDist="../dataset/RefSeq/hg19/"+TODAY+"/refFlatDistProm.bed",
+			reflatExons="../dataset/RefSeq/hg19/"+TODAY+"/refFlatExons.bed"
 	log:
-	message: "From UCSC refFlat table, convert to BED, extract TSS, core, proximal and distal promoter"
+	message: "From RefSeq refFlat table, convert to BED, extract TSS, core, proximal and distal promoter"
 	shell: """
-			awk 'OFS="\\t" {{print $3,$5,$6,$2,0,$4}}' {input.refFlat} > {output.reflatBed};
+			awk 'OFS="\\t" {{print $3,$5,$6,$2,0,$4}}' {input.refFlat} | bedtools sort -i - > {output.reflatBed};
 			awk 'OFS="\\t" {{if($6 == "+") {{print $1,$2,$2+1,$4,$5,$6}} else {{print $1,$3-1,$3,$4,$5,$6}}}}' {output.reflatBed} > {output.reflatTSS};
 			bedtools sort -i {output.reflatTSS} > {output.reflatTSSSorted};
 			bedtools flank -s -l 40 -r 0 -g {input.gensize} -i {output.reflatTSSSorted} > {output.reflatCore};
@@ -461,32 +507,65 @@ rule FormatAnnotation:
 			awk 'OFS="\\t" {{split($10,a,",");split($11,b,","); for (i = 1; i <= $9; ++i) {{if($4=="-") {{k=$9-i+1}} else {{k=i}}; print $3,a[i],b[i],$2"_exon_"k,$1,$4}}}}' {input.refFlat} | bedtools sort -i - > {output.reflatExons}
 			"""
 	
-	#  awk '$0 !~ /^#/ {print > "gencode.v19.annotation."$3".gtf"}' gencode.v19.annotation.gtf_withproteinids
+rule FormatAnnotationUCSC:
+		input: rules.GetAnnotations_UCSC.output
+		output: touch("../dataset/UCSC/hg19/"+TODAY+"/temp.bed")
+
+rule FormatAnnotationHGNC:
+	input: rules.GetAnnotations_HGNC.output
+	output: touch("../dataset/HGNC/hg19/"+TODAY+"/temp.bed")
 	
+rule FormatAnnotationEnsembl:
+		input: rules.GetAnnotations_Ensembl.output
+		output: touch("../dataset/Ensembl/hg19/"+TODAY+"/temp.bed")	
+
+rule FormatAnnotationGencode:
+		input: rules.GetAnnotations_GenCode.output
+		output: touch("../dataset/Gencode/hg19/"+TODAY+"/temp.bed")	
+				
+		
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+# dsfjsldjfksdl
 	
-	
-	
-rule AnnotateIS:
-	input: annot="../dataset/UCSC/hg19/"+TODAY, 
-			format = rules.FormatAnnotation.output.reflatExons, 
-			IS=rules.QualIS.output.merged_sorted_collapsed,
+rule AnnotateISRefSeq:
+	input: IS=rules.QualIS.output.merged_sorted_collapsed,
+			genes = rules.FormatAnnotationRefSeq.output.reflatBed,
+			TSS = rules.FormatAnnotationRefSeq.output.reflatTSSSorted,
+			CoreP=rules.FormatAnnotationRefSeq.output.reflatCore,
+			ProxP=rules.FormatAnnotationRefSeq.output.reflatProx,
+			DistP=rules.FormatAnnotationRefSeq.output.reflatDist,
+			Exons=rules.FormatAnnotationRefSeq.output.reflatExons
 			
 	output: IntraGenes="13-Report/{NAME}_TAG{TAG}_IntragenicIS.txt", 
 			InterGenes="13-Report/{NAME}_TAG{TAG}_IntergenicIS.txt", 
 			distTSS = "13-Report/{NAME}_TAG{TAG}_distTSS_IS.txt",
 			IntronExon = "13-Report/{NAME}_TAG{TAG}_IntronExonIS.txt",
 			InterProm = "13-Report/{NAME}_TAG{TAG}_PromoterInter.txt",
-			IntraGeneIS = "13-Report/{NAME}_TAG{TAG}_IntragenicIS.bed"
+			IntraGeneIS = "13-Report/{NAME}_TAG{TAG}_IntragenicIS.bed"		
 	shell: """
-			bedtools intersect -a {input.IS} -b {input.annot}/refFlat.bed -wa -wb -filenames > {output.IntraGenes};
-			bedtools intersect -a {input.IS} -b {input.annot}/refFlat.bed -wa -v -wb -filenames > {output.InterGenes};
-			bedtools closest -a {input.IS} -b {input.annot}/refFlatTSSsorted.bed -D b > {output.distTSS};
+			bedtools intersect -a {input.IS} -b {input.genes} -wa -wb -filenames > {output.IntraGenes};
+			bedtools intersect -a {input.IS} -b {input.genes} -wa -v -wb -filenames > {output.InterGenes};
+			bedtools closest -a {input.IS} -b {input.TSS} -D b > {output.distTSS};
 			cut -f 1-7 {output.IntraGenes} | sort -u > {output.IntraGeneIS};
-			bedtools intersect -a {output.IntraGeneIS} -b {input.annot}/refFlatExons.bed -wa -wb -loj -filenames > {output.IntronExon};
-			bedtools intersect -a {output.InterGenes} -b {input.annot}/refFlatCoreProm.bed {input.annot}/refFlatProxProm.bed {input.annot}/refFlatDistProm.bed -wa -wb -loj -filenames > {output.InterProm};
+			bedtools intersect -a {output.IntraGeneIS} -b {input.Exons} -wa -wb -loj -filenames > {output.IntronExon};
+			bedtools intersect -a {output.InterGenes} -b {input.CoreP} {input.ProxP} {input.DistP} -wa -wb -loj -filenames > {output.InterProm};
 			"""
-			
+					
+rule AnnotateISUCSC:
+	input: annot="../dataset/UCSC/hg19/"+TODAY, IS=rules.QualIS.output.merged_sorted_collapsed, DB=rules.FormatAnnotationUCSC.output
+	output: touch("13-Report/{NAME}_TAG{TAG}_reportUCSC.pdf")
+
+rule AnnotateISEnsembl:
+	input: IS=rules.QualIS.output.merged_sorted_collapsed, DB=rules.FormatAnnotationEnsembl.output
+	output: touch("13-Report/{NAME}_TAG{TAG}_reportensembl.pdf")
+
+rule AnnotateISGencode:
+	input: IS=rules.QualIS.output.merged_sorted_collapsed, DB=rules.FormatAnnotationGencode.output
+	output: touch("13-Report/{NAME}_TAG{TAG}_reportGencode.pdf")	
 	
 rule MakeReport:
-	input: rules.QuantIS.output, rules.QualIS.output.merged_sorted_collapsed, rules.AnnotateIS.output
+	input: rules.QuantIS.output, rules.AnnotateISRefSeq.output
 	output: touch("13-Report/{NAME}_TAG{TAG}_report.pdf")
