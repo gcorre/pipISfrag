@@ -80,6 +80,9 @@ rule Demultiplex_TAGS:
 			 fastq-multx -B ../dataset/illuminaTAGs_eautils.txt -b -x -m 1 {input.R1} {input.R2} -o 01-Demultiplex/{wildcards.NAME}_R1_%.fastq.gz 01-Demultiplex/{wildcards.NAME}_R2_%.fastq.gz > {log};
 			"""
 			
+
+	
+			
 rule Find_provirus:
 	input: R1=rules.Demultiplex_TAGS.output.R1, R2=rules.Demultiplex_TAGS.output.R2
 	output: R1Prov="02-provirus/{NAME}_R1_TAG{TAG}_Prov.fastq", R2Prov="02-provirus/{NAME}_R2_TAG{TAG}_Prov.fastq", R1noProv="02-provirus/{NAME}_R1_TAG{TAG}_noProv.fastq", R2noProv="02-provirus/{NAME}_R2_TAG{TAG}_noProv.fastq",
@@ -95,7 +98,7 @@ rule Find_provirus_skewer:
 	output: R1noProv="02-provirus/{NAME}_R1_TAG{TAG}.fastq-unassigned-pair1.fastq" , R2noProv="02-provirus/{NAME}_R1_TAG{TAG}.fastq-unassigned-pair2.fastq"
 	threads: 1
 	shell:"""
-			skewer -m head -r 0.1 -d 0 -l 20 -t 8 -k 28 -b -x aaaatctctagcagtggcgcccgaacag -y NNNNNNNNNNNNNNNNNNNNNNNNNNNN -o "02-provirus/{wildcards.NAME}_R1_TAG{wildcards.TAG}.fastq" {input.R1} {input.R2} 
+			skewer -m head -r 0.1 -d 0 -l 20 -t 8 -k 28 -b -x aaaatctctagcagtggcgcccgaacag -y NNNNNNNNNNNNNNNNNNNNNNNNNNNN -o "02-provirus/{wildcards.NAME}_R1_TAG{wildcards.TAG}.fastq" {input.R1} {input.R2}
 			"""
 	
 	
@@ -689,9 +692,34 @@ rule AnnotateISGencode:
 	output: touch("13-Report/{NAME}_TAG{TAG}_reportGencode.pdf")
 	threads: 1	
 	
+##########################################################################
+
+
+rule QC_stat:
+	input: rules.Map_R1_with_Linker.output.mapped
+	output: QC="QC_{NAME}_TAG{TAG}/",sam="SAMFLAGS_{NAME}_TAG{TAG}/", fastq="STATFastQ_{NAME}_TAG{TAG}/"
+	shell: """
+			mkdir {output};
+			fastqc -t 8 {input} --adapters ../dataset/contaminants/adapter_list.txt -o {output.QC};
+			find -type f -name "*.sam" -exec  sh -c 'samtools flagstat {{}} > {output.sam}/$(basename {{}} .sam).samstat' \;
+			find -type f -name "*.fastq" -exec sh -c 'fastq-stats -s 0 {{}} > {output.fastq}/$(basename {{}} .fastq).stat' \;
+			find -type f -name "*.fastq.gz*" -exec sh -c 'fastq-stats -s 0 {{}} > {output.fastq}/$(basename {{}} .fastq.gz).stat' \;
+			"""
+			
+			
+		# rules.Demultiplex_TAGS.output.R1, 
+		#	rules.Demultiplex_TAGS.output.R2,
+		#	rules.Find_Linker_R1.output.R1Linker,
+		#	rules.Find_Linker_R1.output.R2Linker,
+		#	rules.Find_Elong.output.R1elong,
+		#	rules.Find_Elong.output.R2elong,
+		#	rules.Find_Linker_R2.output.R1Linker,
+		#	rules.Find_Linker_R2.output.R1Linker,
+		#	rules.Map_R1_R2_pairs.output.mapped,
+		#	rules.Map_R1_noLinker.output.mapped,	
 	
 rule MakeReport:
-	input: rules.QuantIS.output, rules.AnnotateISEnsembl.output,rules.AnnotateISUCSC.output,rules.AnnotateISRefSeq.output,rules.AnnotateISGencode.output
+	input: rules.QC_stat.output
 	output: touch("13-Report/{NAME}_TAG{TAG}_report.pdf")
 	threads: 1
 	
