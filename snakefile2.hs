@@ -56,7 +56,7 @@ TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 
 
 rule targets:
-	input: "13-Report/"+SAMPLE+"_TAG"+TAG+"_report.pdf"
+	input: SAMPLE+"_TAG"+TAG+"_report.pdf"
 	
 	
 	
@@ -80,13 +80,11 @@ rule Demultiplex_TAGS:
 			 fastq-multx -B ../dataset/illuminaTAGs_eautils.txt -b -x -m 1 {input.R1} {input.R2} -o 01-Demultiplex/{wildcards.NAME}_R1_%.fastq.gz 01-Demultiplex/{wildcards.NAME}_R2_%.fastq.gz > {log};
 			"""
 			
-
-	
 			
 rule Find_provirus:
 	input: R1=rules.Demultiplex_TAGS.output.R1, R2=rules.Demultiplex_TAGS.output.R2
 	output: R1Prov="02-provirus/{NAME}_R1_TAG{TAG}_Prov.fastq", R2Prov="02-provirus/{NAME}_R2_TAG{TAG}_Prov.fastq", R1noProv="02-provirus/{NAME}_R1_TAG{TAG}_noProv.fastq", R2noProv="02-provirus/{NAME}_R2_TAG{TAG}_noProv.fastq",
-	log:"log/Provirus.log"
+	log:"log/Trim-Provirus_in_R1.log"
 	threads: 1
 	message: "Look for the Provirus in R1"
 	shell: """
@@ -95,27 +93,38 @@ rule Find_provirus:
 			
 rule Find_provirus_skewer:
 	input: R1=rules.Demultiplex_TAGS.output.R1, R2=rules.Demultiplex_TAGS.output.R2
-	output: R1noProv="02-provirus/{NAME}_R1_TAG{TAG}.fastq-unassigned-pair1.fastq" , R2noProv="02-provirus/{NAME}_R1_TAG{TAG}.fastq-unassigned-pair2.fastq"
+	output: R1noProv="02-provirus/{NAME}_R1_TAG{TAG}-unassigned-pair1.fastq" , R2noProv="02-provirus/{NAME}_R1_TAG{TAG}-unassigned-pair2.fastq"
 	threads: 1
+	log:"log/Trim-Provirus_in_R1.log"
 	shell:"""
-			skewer -m head -r 0.1 -d 0 -l 20 -t 8 -k 28 -b -x aaaatctctagcagtggcgcccgaacag -y NNNNNNNNNNNNNNNNNNNNNNNNNNNN -o "02-provirus/{wildcards.NAME}_R1_TAG{wildcards.TAG}.fastq" {input.R1} {input.R2}
+			skewer -m head -r 0.1 -d 0 -l 20 -t 8 -k 28 -b -x aaaatctctagcagtggcgcccgaacag -y NNNNNNNNNNNNNNNNNNNNNNNNNNNN -o "02-provirus/{wildcards.NAME}_R1_TAG{wildcards.TAG}" {input.R1} {input.R2} 2> {log}
 			"""
 	
 	
 rule Find_LTR:
 	input: R1=rules.Find_provirus_skewer.output.R1noProv, R2=rules.Find_provirus_skewer.output.R2noProv
 	output: R1LTR="03-LTR/{NAME}_R1_TAG{TAG}_LTR.fastq", R2LTR="03-LTR/{NAME}_R2_TAG{TAG}_LTR.fastq", R1noLTR="03-LTR/{NAME}_R1_TAG{TAG}_noLTR.fastq", R2noLTR="03-LTR/{NAME}_R2_TAG{TAG}_noLTR.fastq",
-	log:"log/LTR.log"
+	log:"log/Trim-LTR_in_R1.log"
 	threads: 1
 	message: "Look for the LTR in R1"
 	shell: """
 			cutadapt -g GTCTGTTGTGTGACTCTGGTAAC -m 20 -O 23 -e 0.1 --no-indels -o {output.R1LTR} -p {output.R2LTR} --untrimmed-paired-output {output.R2noLTR} --untrimmed-output {output.R1noLTR} {input.R1} {input.R2} > {log}
 			"""
+			
+rule Find_LTR_skewer:
+	input: R1=rules.Find_provirus_skewer.output.R1noProv, R2=rules.Find_provirus_skewer.output.R2noProv
+	output: R1LTR="03-LTR/{NAME}_R1_TAG{TAG}_LTR.fastq", R2LTR="03-LTR/{NAME}_R2_TAG{TAG}_LTR.fastq", R1noLTR="03-LTR/{NAME}_R1_TAG{TAG}_noLTR.fastq", R2noLTR="03-LTR/{NAME}_R2_TAG{TAG}_noLTR.fastq",
+	log:"log/Trim-LTR_in_R1.log"
+	threads: 1
+	message: "Look for the LTR in R1"
+	shell: """
+			skewer -m head -r 0.1 -d 0 -l 20 -t 8 -k 23 -b -x GTCTGTTGTGTGACTCTGGTAAC -y NNNNNNNNNNNNNNNNNNNNNNN -o "03-LTR/{wildcards.NAME}_R1_TAG{wildcards.TAG}"
+			"""
 
 rule Find_Elong:
 	input: R1=rules.Find_LTR.output.R1LTR, R2=rules.Find_LTR.output.R2LTR
 	output: R1elong="04-ELONG/{NAME}_R1_TAG{TAG}_Elong.fastq", R2elong="04-ELONG/{NAME}_R2_TAG{TAG}_Elong.fastq", R1noelong="04-ELONG/{NAME}_R1_TAG{TAG}_noElong.fastq", R2noelong="04-ELONG/{NAME}_R2_TAG{TAG}_noElong.fastq",
-	log:"log/ELONG.log"
+	log:"log/Trim-ELONG_in_R1.log"
 	threads: 1
 	message: "Look for the Elong in R1"
 	shell: """
@@ -124,9 +133,9 @@ rule Find_Elong:
 
 rule Start_with_GCA:
 	input: R1=rules.Find_Elong.output.R1elong, R2=rules.Find_Elong.output.R2elong
-	output: GCAR1="09-GCA/{NAME}_R1_TAG{TAG}_GCA.fastq", noGCAR1="09-GCA/{NAME}_R1_TAG{TAG}_noGCA.fastq",GCAR2="09-GCA/{NAME}_R2_TAG{TAG}_GCA.fastq", noGCAR2="09-GCA/{NAME}_R2_TAG{TAG}_noGCA.fastq"
+	output: GCAR1="05-GCA/{NAME}_R1_TAG{TAG}_GCA.fastq", noGCAR1="05-GCA/{NAME}_R1_TAG{TAG}_noGCA.fastq",GCAR2="05-GCA/{NAME}_R2_TAG{TAG}_GCA.fastq", noGCAR2="05-GCA/{NAME}_R2_TAG{TAG}_noGCA.fastq"
 	message: "Filtering R1 reads that start with GCA"
-	log: "log/GCA-R1.log"
+	log: "log/Trim-GCA_starting_R1.log"
 	threads: 1
 	shell: """
 			cutadapt -g ^GCA  -m 20 -e 0 --no-indels -o {output.GCAR1} -p {output.GCAR2} --untrimmed-output {output.noGCAR1} --untrimmed-paired-output {output.noGCAR2} {input.R1} {input.R2} > {log};
@@ -134,8 +143,8 @@ rule Start_with_GCA:
 
 rule Find_Linker_R1:
 	input: R1=rules.Start_with_GCA.output.GCAR1, R2=rules.Start_with_GCA.output.GCAR2
-	output: R1Linker="05-Linker/{NAME}_R1_TAG{TAG}_Linker.fastq", R2Linker="05-Linker/{NAME}_R2_TAG{TAG}_Linker.fastq", R1noLinker="05-Linker/{NAME}_R1_TAG{TAG}_noLinker.fastq", R2noLinker="05-Linker/{NAME}_R2_TAG{TAG}_noLinker.fastq",
-	log:"log/LinkerR1.log"
+	output: R1Linker="06-Linker_R1/{NAME}_R1_TAG{TAG}_Linker.fastq", R2Linker="06-Linker_R1/{NAME}_R2_TAG{TAG}_Linker.fastq", R1noLinker="06-Linker_R1/{NAME}_R1_TAG{TAG}_noLinker.fastq", R2noLinker="06-Linker_R1/{NAME}_R2_TAG{TAG}_noLinker.fastq",
+	log:"log/Trim-Linker_in_R1.log"
 	threads: 1
 	message: "Look for the Linker in R1"
 	shell: """
@@ -145,7 +154,7 @@ rule Find_Linker_R1:
 rule Find_Linker_R2:
 	input: R1=rules.Find_Linker_R1.output.R1noLinker, R2=rules.Find_Linker_R1.output.R2noLinker
 	output: R1Linker="06-LinkerR2/{NAME}_R1_TAG{TAG}_Linker.fastq", R2Linker="06-LinkerR2/{NAME}_R2_TAG{TAG}_Linker.fastq", R1noLinker="06-LinkerR2/{NAME}_R1_TAG{TAG}_noLinker.fastq", R2noLinker="06-LinkerR2/{NAME}_R2_TAG{TAG}_noLinker.fastq"
-	log:"log/LinkerR2.log"
+	log:"log/Trim-Linker_in_R2.log"
 	threads: 1
 	message: "Look for the Linker in R2"
 	shell: """
@@ -159,13 +168,13 @@ rule Find_Linker_R2:
 	
 rule Collapse_identical_reads:
 	input: rules.Find_Linker_R1.output.R1Linker
-	output: file = "10-collapsed/{NAME}_R1_TAG{TAG}_Linker_trimmed.fastq"
-	message: "Collapsing identical reads before mapping"
-	log:"log/collapsingR1.log"
+	output: file = "07-collapsed/{NAME}_R1_TAG{TAG}_Linker_trimmed.fastq"
+	message: "Collapsing R1 with linker identical reads before mapping"
+	log:"log/collapse_R1wLinker.log"
 	threads: 1
 	shell: """
 			#fastx_collapser -v -i {input} -o {output} > {log}
-			 seqcluster collapse -f {input} -d -o "10-collapsed/" -m 1
+			 seqcluster collapse -f {input} -d -o "07-collapsed/" -m 1
 			"""
 
 ####
@@ -175,12 +184,12 @@ rule Collapse_identical_reads:
 		
 rule Map_R1_with_Linker :
 	input: rules.Collapse_identical_reads.output.file
-	output: mapped="11-mapping/{NAME}_R1_TAG{TAG}_mapped.sam",unmapped="11-mapping/{NAME}_R1_TAG{TAG}_unmapped.fastq", exact="11-mapping/{NAME}_R1_TAG{TAG}_mapped_exact.sam"
-	log: met="log/mappingR1.log",summary="log/mapping_numbers.log"
+	output: mapped="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.sam",unmapped="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq", exact="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam"
+	log: met="log/mappingR1wLinker.log",summary="log/mappingR1wLinker_numbers.log"
 	threads: 8
 	message: "Mapping R1 reads that contain the linker and filter out those with mismatches in the 3 first positions after the LTR"
 	shell: """
-			bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --no-unal --un {output.unmapped} --met-file {log.met} {input} -S {output.mapped} 2> {log.summary}
+			bowtie2 -N 0 -L 25 -i S,25,0 --score-min L,0,-0.16 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --no-unal --un {output.unmapped} --met-file {log.met} {input} -S {output.mapped} 2> {log.summary}
 			awk -F "\\t" '(/^@/) || ($2==0 && !/XS:i:/ && !/MD:Z:[012][A-Za-z].*\t/) || ($2==16 && !/XS:i:/ && !/MD:Z:.*[A-Za-z][012]\t/) {{print $0}}' {output.mapped} > {output.exact}
 			"""
 
@@ -200,17 +209,17 @@ rule Map_R1_with_Linker :
 
 rule Filter_Map_R1:
 	input: rules.Map_R1_with_Linker.output.exact
-	output: bam=temp("12-Annotation/{NAME}_R1_TAG{TAG}_mapped.bam"),
-			sortbam="12-Annotation/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
-			idx="12-Annotation/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
-			bed="12-Annotation/{NAME}_R1_TAG{TAG}_mapped_sorted.bed",
-			ISsortednum="12-Annotation/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
-			IS=temp("12-Annotation/{NAME}_R1_TAG{TAG}_IS.bed"),
-			ISsorted="12-Annotation/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
-			IScollapsedSize="12-Annotation/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
-			IScluster="12-Annotation/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
-			ISclustersorted="12-Annotation/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
-			IScollapsed="12-Annotation/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
+	output: bam=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.bam"),
+			sortbam="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
+			idx="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
+			bed="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bed",
+			ISsortednum="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
+			IS=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS.bed"),
+			ISsorted="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
+			IScollapsedSize="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
+			IScluster="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
+			ISclustersorted="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
+			IScollapsed="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
 	params: qual="10", collapsing_window="-1"
 	threads: 1
 	message:"Filtering mapped reads, converting to BED,Collapsing by 3nt and counting read abundance by IS"
@@ -238,9 +247,9 @@ rule Filter_Map_R1:
 # look for the reverse-complement Elongation in R2 3'end.
 rule Find_RC_LTR_R2:
 	input: R1=rules.Find_Linker_R2.output.R1Linker,R2=rules.Find_Linker_R2.output.R2Linker
-	output: trimmedLTRRCR1="07-cleaning2/{NAME}_R1_TAG{TAG}_trimmedElongRC.fastq", 
-			trimmedLTRRCR2="07-cleaning2/{NAME}_R2_TAG{TAG}_trimmedElongRC.fastq"
-	log: "log/RCLTR_R2.log"
+	output: trimmedLTRRCR1="06-RCLTR_R2/{NAME}_R1_TAG{TAG}_trimmedElongRC.fastq", 
+			trimmedLTRRCR2="06-RCLTR_R2/{NAME}_R2_TAG{TAG}_trimmedElongRC.fastq"
+	log: "log/Trim-RC-LTR_in_R2.log"
 	threads: 1
 	message: "Trimming R2 that have LTR"
 	shell: """
@@ -253,13 +262,13 @@ rule Find_RC_LTR_R2:
 	
 rule Map_R1_R2_pairs:
 	input: R1=rules.Find_RC_LTR_R2.output.trimmedLTRRCR1, R2=rules.Find_RC_LTR_R2.output.trimmedLTRRCR2
-	output: mapped="11-mappingR1R2/{NAME}_TAG{TAG}_mapped.sam", R1unal="11-mappingR1R2/{NAME}_R1_TAG{TAG}_unaligned.fastq"
+	output: mapped="08-mappingR1R2/{NAME}_TAG{TAG}_mapped.sam", R1unal="08-mappingR1R2/{NAME}_R1_TAG{TAG}_unaligned.fastq"
 	message: "Mapping R1 and R2 reads as pairs"
 	params: fragLenght="800", Trim3="5"
-	log: met="log/mappingR1R2.log",summary="log/mappingR1R2_numbers.log"
+	log: met="log/mapping_R1R2.log",summary="log/mapping_R1R2_numbers.log"
 	threads: 8
 	shell: """
-			bowtie2 -p {threads} -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 {params.Trim3} --no-unal --al-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "11-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X {params.fragLenght} --no-mixed --met-file {log.met} 2> {log.summary};
+			bowtie2 -p {threads}  -N 0 -L 25 -i S,25,0 --score-min L,0,-0.16 --gbar 10 -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 {params.Trim3} --no-unal --al-conc "08-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "08-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X {params.fragLenght} --no-mixed --met-file {log.met} 2> {log.summary};
 			"""
 
 #########################################################################
@@ -269,10 +278,13 @@ rule Map_R1_R2_pairs:
 			
 rule Filter_Map_R1R2_unique:
 	input: rules.Map_R1_R2_pairs.output.mapped
-	output: badqual = "11-mappingR1R2/{NAME}_TAG{TAG}_bad_qual.sam",confident="11-mappingR1R2/{NAME}_TAG{TAG}_qual_gt20.sam",R1_badqual= "11-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.sam" ,R1_badqualfq= "11-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.fastq"
+	output: badqual = "08-mappingR1R2/{NAME}_TAG{TAG}_bad_qual.sam",
+			confident="08-mappingR1R2/{NAME}_TAG{TAG}_qual_gt20.sam",
+			R1_badqual= "08-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.sam" ,
+			R1_badqualfq= "08-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.fastq"
 	params: qual="20"
 	message: "filtering bad quality alignments that may be multiple hits, keep R1 reads and convert to fastq."
-	log: "log/R1R2_filtering.log"
+	log: "log/mapping_R1R2_filtering.log"
 	threads :1
 	shell: """
 			samtools view -h -q {params.qual} {input} -o {output.confident} -U {output.badqual};
@@ -290,15 +302,15 @@ rule Filter_Map_R1R2_unique:
 
 rule Filter_Map_R1R2:
 	input: sam = rules.Filter_Map_R1R2_unique.output.confident
-	output: bam = "12-Annotation_R1R2/{NAME}_TAG{TAG}.bam",
-			bed = "12-Annotation_R1R2/{NAME}_TAG{TAG}.bed",
-			IS= "12-Annotation_R1R2/{NAME}_TAG{TAG}_IS.bed",
-			idx= "12-Annotation_R1R2/{NAME}_TAG{TAG}.bai",
-			ISsorted="12-Annotation_R1R2/{NAME}_TAG{TAG}_sorted.bed",
-			IScluster="12-Annotation_R1R2/{NAME}_TAG{TAG}_clusters.bed",
-			IScollapsedSize="12-Annotation_R1R2/{NAME}_TAG{TAG}_IS_collapsedBySizeCluster.bed",
-			ISclustersorted="12-Annotation_R1R2/{NAME}_TAG{TAG}_IS_cluster_sorted.bed",
-			IScollapsed="12-Annotation_R1R2/{NAME}_TAG{TAG}_IS_Collapsed.bed"
+	output: bam = "08-mappingR1R2/{NAME}_TAG{TAG}.bam",
+			bed = "08-mappingR1R2/{NAME}_TAG{TAG}.bed",
+			IS= "08-mappingR1R2/{NAME}_TAG{TAG}_IS.bed",
+			idx= "08-mappingR1R2/{NAME}_TAG{TAG}.bai",
+			ISsorted="08-mappingR1R2/{NAME}_TAG{TAG}_sorted.bed",
+			IScluster="08-mappingR1R2/{NAME}_TAG{TAG}_clusters.bed",
+			IScollapsedSize="08-mappingR1R2/{NAME}_TAG{TAG}_IS_collapsedBySizeCluster.bed",
+			ISclustersorted="08-mappingR1R2/{NAME}_TAG{TAG}_IS_cluster_sorted.bed",
+			IScollapsed="08-mappingR1R2/{NAME}_TAG{TAG}_IS_Collapsed.bed"
 			
 			
 			
@@ -322,8 +334,11 @@ rule Filter_Map_R1R2:
 # These reads are only use for a qualitative anaylsis of IS, not for the quantification.	
 
 rule Merge_R1alones:
-	input: A=rules.Find_Linker_R2.output.R1noLinker, B=rules.Filter_Map_R1R2_unique.output.R1_badqualfq, C = rules.Map_R1_R2_pairs.output.R1unal, D=rules.Map_R1_with_Linker.output.unmapped
-	output: "11-R1only/{NAME}_R1_TAG{TAG}_merged.fastq"
+	input: A=rules.Find_Linker_R2.output.R1noLinker, 
+			B=rules.Filter_Map_R1R2_unique.output.R1_badqualfq,
+			C = rules.Map_R1_R2_pairs.output.R1unal, 
+			D=rules.Map_R1_with_Linker.output.unmapped
+	output: "07-Merge_R1only/{NAME}_R1_TAG{TAG}_merged.fastq"
 	message: "Merging R1 reads without Linker and R1 from pairs that were mapped multiple times and R1 reads from pairs that do not map concordantly."
 	threads:1
 	log: 
@@ -336,10 +351,10 @@ rule Merge_R1alones:
 	
 rule Cut_TTAA_R1_noLinker:
 	input: rules.Merge_R1alones.output
-	output: TTAA="08-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq", TTAA_cut="08-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp.fastq"
+	output: TTAA="07-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq", TTAA_cut="07-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp.fastq"
 	message: "Cutting TTAA sequences that are still present and filter reads shorter than 20bp"
 	threads: 1
-	log: "log/TTAAR1alone.log"
+	log: "log/Cut_TTAA_Merge_R1.log"
 	shell: """
 			  awk '{{if(NR %4 ==2) {{x=index($0,"TTAA");if(x>0){{print substr($0,1,x)}}else{{print $0}}}} else {{if(NR % 4 ==0 && x>0) {{print substr($0,1,x)}} else{{print $0}}}}}}' {input} > {output.TTAA};
 			  cutadapt -m 20 -o {output.TTAA_cut} {output.TTAA} > {log}
@@ -347,24 +362,24 @@ rule Cut_TTAA_R1_noLinker:
 			
 rule Collapse_identical_R1_noLinkerReads:
 	input: rules.Cut_TTAA_R1_noLinker.output.TTAA_cut
-	output: file = "10-collapsedR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp_trimmed.fastq"
+	output: file = "07-collapse_R1Merged/{NAME}_R1_TAG{TAG}_TTAA-cut20bp_trimmed.fastq"
 	message: "Collapsing identical reads before mapping"
-	log:"log/collapsingR1alone.log"
+	log:"log/Collapse_R1_Merge.log"
 	threads: 1
 	shell: """
 			#fastx_collapser -v -i {input} -o {output} > {log}
-			 seqcluster collapse -f {input} -d -o "10-collapsedR1alone/" -m 0
+			 seqcluster collapse -f {input} -d -o "07-collapse_R1Merged/" -m 0
 			"""	
 
 			
 rule Map_R1_noLinker:
 		input: R1=rules.Collapse_identical_R1_noLinkerReads.output.file
-		output: mapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_mapped.sam",unmapped="11-mappingR1alone/{NAME}_R1_TAG{TAG}_unmapped.fastq", exact="11-mappingR1alone/{NAME}_R1_TAG{TAG}_mapped_exact.sam"
-		message:"Mapping R1 reads without Linker in R1 nor R2"
+		output: mapped="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_mapped.sam",unmapped="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq", exact="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam"
+		message:"Mapping R1 reads without Linker in R1 nor R2 and R1 that were unmapped in previous steps"
 		threads: 8
-		log: met="log/mappingR1alone.log",summary="log/mappingR1alone_numbers.log"
+		log: met="log/mapping_Merged_R1only.log",summary="log/mappingR1alone_numbers.log"
 		shell: """
-				bowtie2 -N 1 -L 25 -i S,25,0 --score-min L,0,-0.15 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --trim3 5 --no-unal --un {output.unmapped} --met-file {log.met} {input.R1} -S {output.mapped} 2> {log.summary}
+				bowtie2 -N 0 -L 25 -i S,25,0 --score-min L,0,-0.16 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --trim3 5 --no-unal --un {output.unmapped} --met-file {log.met} {input.R1} -S {output.mapped} 2> {log.summary}
 				awk -F "\\t" '(/^@/) || ($2==0 && !/XS:i:/ && !/MD:Z:[012][A-Za-z].*\t/) || ($2==16 && !/XS:i:/ && !/MD:Z:.*[A-Za-z][012]\t/) {{print $0}}' {output.mapped} > {output.exact}
 				"""
 			
@@ -372,17 +387,17 @@ rule Map_R1_noLinker:
 			
 rule Filter_Map_R1_noLinker:
 	input: rules.Map_R1_noLinker.output.exact
-	output: bam="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped.bam",
-			sortbam="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
-			idx="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
-			bed="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_mapped_sorted.bed",
-			IS="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS.bed",
-			ISsorted="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
-			ISsortednum="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
-			IScollapsedSize="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
-			IScluster="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
-			ISclustersorted="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
-			IScollapsed="12-AnnotationR1alone/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
+	output: bam="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_mapped.bam",
+			sortbam="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
+			idx="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
+			bed="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bed",
+			IS="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_IS.bed",
+			ISsorted="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
+			ISsortednum="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
+			IScollapsedSize="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
+			IScluster="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
+			ISclustersorted="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
+			IScollapsed="08-mapping_Merged_R1NoLinker/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
 	params: qual="10"
 	threads: 1
 	message:"Filtering mapped reads, converting to BED, Collapsing by 3nt and counting read abundance by IS"
@@ -409,13 +424,13 @@ rule QualIS:
 	input: R1full=rules.Filter_Map_R1.output.IScollapsed, 
 		R1alone=rules.Filter_Map_R1_noLinker.output.IScollapsed, 
 		R1R2=rules.Filter_Map_R1R2.output.IScollapsed
-	output: merged=temp("13-qualitativeIS/{NAME}_TAG{TAG}_qualIS.bed"), 
-			merged_corrected="13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed",
-			merged_sorted = "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted.bed",
-			merged_sorted_collapsed= "13-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted_collapsed.bed"
+	output: merged=temp("09-qualitativeIS/{NAME}_TAG{TAG}_qualIS.bed"), 
+			merged_corrected="09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed",
+			merged_sorted = "09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted.bed",
+			merged_sorted_collapsed= "09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted_collapsed.bed"
 	message: "Merging and collapsing IS from each step"
 	threads: 8
-	log: "log/qualIS.log"
+	log: "log/qualitativeIS.log"
 	shell: """
 			cat  {input.R1full} {input.R1alone} {input.R1R2} > {output.merged};
 			awk '{{print "chr"$0}}' {output.merged} > {output.merged_corrected};
@@ -439,11 +454,14 @@ rule QualIS:
 rule QuantIS:
 	input:R1full=rules.Filter_Map_R1.output.IScollapsed,
 		R1R2=rules.Filter_Map_R1R2.output.IScollapsed
-	output: merged="13-quantitativeIS/{NAME}_TAG{TAG}_quantIS_merged.bed", collapsed = "13-quantitativeIS/{NAME}_TAG{TAG}_quantIS_collapsed.bed"
+	output: merged="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_merged.bed", 
+			merged_corrected="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_merged_corrected.bed",
+			collapsed = "09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_collapsed.bed"
 	threads: 1
 	shell: """
-			cat {input.R1full} {input.R1R2} > {output.merged}
-			bedtools sort -i {output.merged} | bedtools merge -d -1 -s -c 7,8 -o sum,count_distinct -i - > {output.collapsed}
+			cat {input.R1full} {input.R1R2} > {output.merged};
+			awk '{{print "chr"$0}}' {output.merged} > {output.merged_corrected};
+			bedtools sort -i {output.merged_corrected} | bedtools merge -d -1 -s -c 1,2,3,4,5,6,7,8 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct -i - | cut -f 5- > {output.collapsed}
 			"""
 			
 			
@@ -621,12 +639,12 @@ rule AnnotateISRefSeq:
 			DistP=rules.FormatAnnotationRefSeq.output.reflatDist,
 			Exons=rules.FormatAnnotationRefSeq.output.reflatExons
 			
-	output: IntraGenes="13-Annotation/RefSeq/{NAME}_TAG{TAG}_IntragenicIS.txt", 
-			InterGenes="13-Annotation/RefSeq/{NAME}_TAG{TAG}_IntergenicIS.txt", 
-			distTSS = "13-Annotation/RefSeq/{NAME}_TAG{TAG}_distTSS_IS.txt",
-			IntronExon = "13-Annotation/RefSeq/{NAME}_TAG{TAG}_IntronExonIS.txt",
-			InterProm = "13-Annotation/RefSeq/{NAME}_TAG{TAG}_PromoterInter.txt",
-			IntraGeneIS = "13-Annotation/RefSeq/{NAME}_TAG{TAG}_IntragenicIS.bed"	
+	output: IntraGenes="10-Annotation/RefSeq/{NAME}_TAG{TAG}_IntragenicIS.txt", 
+			InterGenes="10-Annotation/RefSeq/{NAME}_TAG{TAG}_IntergenicIS.txt", 
+			distTSS = "10-Annotation/RefSeq/{NAME}_TAG{TAG}_distTSS_IS.txt",
+			IntronExon = "10-Annotation/RefSeq/{NAME}_TAG{TAG}_IntronExonIS.txt",
+			InterProm = "10-Annotation/RefSeq/{NAME}_TAG{TAG}_PromoterInter.txt",
+			IntraGeneIS = "10-Annotation/RefSeq/{NAME}_TAG{TAG}_IntragenicIS.bed"	
 	threads: 1
 	shell: """
 			bedtools intersect -a {input.IS} -b {input.genes} -wa -wb -filenames > {output.IntraGenes};
@@ -646,12 +664,12 @@ rule AnnotateISUCSC:
 			DistP=rules.FormatAnnotationUCSC.output.UCSCDist,
 			Exons=rules.FormatAnnotationUCSC.output.UCSCExons
 			
-	output: IntraGenes="13-Annotation/UCSC/{NAME}_TAG{TAG}_IntragenicIS.txt", 
-			InterGenes="13-Annotation/UCSC/{NAME}_TAG{TAG}_IntergenicIS.txt", 
-			distTSS = "13-Annotation/UCSC/{NAME}_TAG{TAG}_distTSS_IS.txt",
-			IntronExon = "13-Annotation/UCSC/{NAME}_TAG{TAG}_IntronExonIS.txt",
-			InterProm = "13-Annotation/UCSC/{NAME}_TAG{TAG}_PromoterInter.txt",
-			IntraGeneIS = "13-Annotation/UCSC/{NAME}_TAG{TAG}_IntragenicIS.bed"	
+	output: IntraGenes="10-Annotation/UCSC/{NAME}_TAG{TAG}_IntragenicIS.txt", 
+			InterGenes="10-Annotation/UCSC/{NAME}_TAG{TAG}_IntergenicIS.txt", 
+			distTSS = "10-Annotation/UCSC/{NAME}_TAG{TAG}_distTSS_IS.txt",
+			IntronExon = "10-Annotation/UCSC/{NAME}_TAG{TAG}_IntronExonIS.txt",
+			InterProm = "10-Annotation/UCSC/{NAME}_TAG{TAG}_PromoterInter.txt",
+			IntraGeneIS = "10-Annotation/UCSC/{NAME}_TAG{TAG}_IntragenicIS.bed"	
 	threads: 1
 	shell: """
 			bedtools intersect -a {input.IS} -b {input.genes} -wa -wb -filenames > {output.IntraGenes};
@@ -671,12 +689,12 @@ rule AnnotateISEnsembl:
 			DistP=rules.FormatAnnotationEnsembl.output.EnsDist,
 			Exons=rules.FormatAnnotationEnsembl.output.EnsExons
 			
-	output: IntraGenes="13-Annotation/Ensembl/{NAME}_TAG{TAG}_IntragenicIS.txt", 
-			InterGenes="13-Annotation/Ensembl/{NAME}_TAG{TAG}_IntergenicIS.txt", 
-			distTSS = "13-Annotation/Ensembl/{NAME}_TAG{TAG}_distTSS_IS.txt",
-			IntronExon = "13-Annotation/Ensembl/{NAME}_TAG{TAG}_IntronExonIS.txt",
-			InterProm = "13-Annotation/Ensembl/{NAME}_TAG{TAG}_PromoterInter.txt",
-			IntraGeneIS = "13-Annotation/Ensembl/{NAME}_TAG{TAG}_IntragenicIS.bed"	
+	output: IntraGenes="10-Annotation/Ensembl/{NAME}_TAG{TAG}_IntragenicIS.txt", 
+			InterGenes="10-Annotation/Ensembl/{NAME}_TAG{TAG}_IntergenicIS.txt", 
+			distTSS = "10-Annotation/Ensembl/{NAME}_TAG{TAG}_distTSS_IS.txt",
+			IntronExon = "10-Annotation/Ensembl/{NAME}_TAG{TAG}_IntronExonIS.txt",
+			InterProm = "10-Annotation/Ensembl/{NAME}_TAG{TAG}_PromoterInter.txt",
+			IntraGeneIS = "10-Annotation/Ensembl/{NAME}_TAG{TAG}_IntragenicIS.bed"	
 	threads: 1
 	shell: """
 			bedtools intersect -a {input.IS} -b {input.genes} -wa -wb -filenames > {output.IntraGenes};
@@ -689,38 +707,37 @@ rule AnnotateISEnsembl:
 
 rule AnnotateISGencode:
 	input: IS=rules.QualIS.output.merged_sorted_collapsed, DB=rules.FormatAnnotationGencode.output
-	output: touch("13-Report/{NAME}_TAG{TAG}_reportGencode.pdf")
+	output: touch("10-Annotation/Gencode/{NAME}_TAG{TAG}_reportGencode.pdf")
 	threads: 1	
 	
 ##########################################################################
 
 
 rule QC_stat:
-	input: rules.Map_R1_with_Linker.output.mapped
+	input: rules.Demultiplex_TAGS.output.R1, 
+			rules.Demultiplex_TAGS.output.R2,
+			rules.Find_Linker_R1.output.R1Linker,
+			rules.Find_Linker_R1.output.R2Linker,
+			rules.Find_Elong.output.R1elong,
+			rules.Find_Elong.output.R2elong,
+			rules.Find_Linker_R2.output.R1Linker,
+			rules.Find_Linker_R2.output.R1Linker,
+			rules.Map_R1_R2_pairs.output.mapped,
+			rules.Map_R1_noLinker.output.mapped,rules.Map_R1_with_Linker.output.mapped
 	output: QC="QC_{NAME}_TAG{TAG}/",sam="SAMFLAGS_{NAME}_TAG{TAG}/", fastq="STATFastQ_{NAME}_TAG{TAG}/"
+	message: "Gathering statistics from sam and fastq files"
 	shell: """
 			mkdir {output};
 			fastqc -t 8 {input} --adapters ../dataset/contaminants/adapter_list.txt -o {output.QC};
 			find -type f -name "*.sam" -exec  sh -c 'samtools flagstat {{}} > {output.sam}/$(basename {{}} .sam).samstat' \;
 			find -type f -name "*.fastq" -exec sh -c 'fastq-stats -s 0 {{}} > {output.fastq}/$(basename {{}} .fastq).stat' \;
 			find -type f -name "*.fastq.gz*" -exec sh -c 'fastq-stats -s 0 {{}} > {output.fastq}/$(basename {{}} .fastq.gz).stat' \;
+			multiqc . -f
 			"""
-			
-			
-		# rules.Demultiplex_TAGS.output.R1, 
-		#	rules.Demultiplex_TAGS.output.R2,
-		#	rules.Find_Linker_R1.output.R1Linker,
-		#	rules.Find_Linker_R1.output.R2Linker,
-		#	rules.Find_Elong.output.R1elong,
-		#	rules.Find_Elong.output.R2elong,
-		#	rules.Find_Linker_R2.output.R1Linker,
-		#	rules.Find_Linker_R2.output.R1Linker,
-		#	rules.Map_R1_R2_pairs.output.mapped,
-		#	rules.Map_R1_noLinker.output.mapped,	
-	
+
 rule MakeReport:
-	input: rules.QC_stat.output
-	output: touch("13-Report/{NAME}_TAG{TAG}_report.pdf")
+	input:  rules.QuantIS.output, rules.QualIS.output
+	output: touch("{NAME}_TAG{TAG}_report.pdf")
 	threads: 1
 	
 onsuccess:
