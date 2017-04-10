@@ -15,9 +15,16 @@ RUN apt-get update && apt-get install -y --force-yes\
 	zlib1g-dev \
 	gnuplot 
 	
-RUN alias ls='ls --color=auto'
+RUN alias ll='ls -l --color=auto'
 	
 #### Install the bioconda repository manager
+RUN wget http://repo.continuum.io/miniconda/Miniconda-latest-Linux-x86_64.sh
+RUN chmod 777 /Miniconda-latest-Linux-x86_64.sh 
+RUN /Miniconda-latest-Linux-x86_64.sh -b -p /opt/seqcluster/
+RUN /opt/seqcluster/bin/conda install seqcluster bcbio-nextgen -c bioconda
+ENV PATH /opt/seqcluster/bin:$PATH
+
+
 
 RUN wget https://repo.continuum.io/miniconda/Miniconda3-4.2.12-Linux-x86_64.sh -O ./miniConda.sh
 RUN chmod 777 ./miniConda.sh
@@ -71,3 +78,5 @@ RUN cpan LWP::Simple module
 
 RUN pip install --upgrade pip
 RUN pip install --user numpy scipy matplotlib ipython jupyter pandas sympy nose
+
+
