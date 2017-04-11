@@ -214,7 +214,7 @@ rule Filter_Map_R1:
 			idx="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
 			bed="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bed",
 			ISsortednum="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
-			IS=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS.bed"),
+			IS=("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS.bed"),
 			ISsorted="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
 			IScollapsedSize="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
 			IScluster="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
