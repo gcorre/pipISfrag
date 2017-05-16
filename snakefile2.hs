@@ -19,7 +19,7 @@
 #
 # docker run --rm --hostname "fragIS" -w /home/ -it -v /d/:/home/ gc/frag:V2 bash
 
-print("#~~~~~~~~Version 24/04/2017~~~~~~~~#");
+print("#~~~~~~~~Version 16/05/2017~~~~~~~~#");
 print("");
 print("#       #    ##    ######    #######");
 print(" #     #     ##    ##        ##   ##");
@@ -29,49 +29,52 @@ print("    #        ##    ######    ##   ##");
 print("");
 print("#~~~~~~~~~~~~~GENETHON~~~~~~~~~~~~~#");
 	
-	
-# Input files R1 and R2 must be in the current path.
-# Be careful to sample name, use the pattern : 
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#	
-#	
-#workdir: "/home/"
 
 from snakemake.utils import min_version
 min_version("3.11.2")
 
+#workdir: "/home/"
 
-BOWTIE2_INDEX = "/home/references/genomes/homo_sapiens/hg19_GRCh37/index_bowtie2/GRCh37.75"
-GENOME="hg19"
 
-import os
-HOME = os.path.expanduser('~')
+
+configfile: "./config.yml"
+
+BOWTIE2_INDEX=config["BOWTIE2_INDEX"]
+SCRIPTS=config["SCRIPTS"]
+DATASET=config["DATASET"]
+GENOME=config["GENOME"]
+
+PROVIRUS_SEQ=config["PROVIRUS_SEQ"]
+LTR_SEQ=config["LTR_SEQ"]
+ELONG_SEQ=config["ELONG_SEQ"]
+LINKER_R1_SEQ=config["LINKER_R1_SEQ"]
+LINKER_R2_SEQ=config["LINKER_R2_SEQ"]
+
+
+
+
+
+
 
 from datetime import date
 #TODAY=str(date.today())
 TODAY="2017-04-03"
 
-ANNOTATION="dataset/"+GENOME+"/"+TODAY+"/"
+ANNOTATION=DATASET+"/"+GENOME+"/"+TODAY+"/"
 
-
+###########################################################
+### this define file name and extract TAG
+### the pattern of file name must be : [a-zA-Z0-9]+_TAG[0-9]+_R[1-2]_[0-9]+.fastq.gz
+### Example : 1DREP-BM26-6mo_TAG12_R1_001.fastq.gz
 
 from glob import glob;
-FILES = glob('*_R[0-9]_*.fastq.gz');
+FILES = glob('*_R[1-2]_*.fastq.gz');
 import re;
 TRAILING=list(set([re.search('_([0-9]+).fastq.gz',FILES[0]).group(1) for w in FILES]))[0]
 FILES=[re.sub('_R[1-2]_[0-9]+.fastq.gz', '',w) for w in FILES];
 SAMPLE=list(set(FILES))[0];
 TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
-
+###########################################################
 
 rule targets:
 	input: SAMPLE+"_TAG"+TAG+"_report.pdf"
@@ -93,7 +96,7 @@ rule Demultiplex_TAGS:
 	threads: 1
 	message: "Demultiplexing according to TAGs list"
 	shell: """
-			 fastq-multx -B ../dataset/illuminaTAGs_eautils.txt -b -x -m 1 {input.R1} {input.R2} -o 01-Demultiplex/{wildcards.NAME}_R1_%.fastq.gz 01-Demultiplex/{wildcards.NAME}_R2_%.fastq.gz > {log};
+			 fastq-multx -B {DATASET}/illuminaTAGs_eautils.txt -b -x -m 1 {input.R1} {input.R2} -o 01-Demultiplex/{wildcards.NAME}_R1_%.fastq.gz 01-Demultiplex/{wildcards.NAME}_R2_%.fastq.gz > {log};
 			"""
 			
 			
@@ -104,7 +107,7 @@ rule Find_provirus:
 	threads: 1
 	message: "Look for the Provirus in R1"
 	shell: """
-			cutadapt -g aaaatctctagcagtggcgcccgaacag -O 28 -e 0.1 --no-trim --no-indels -o {output.R1Prov} -p {output.R2Prov} --untrimmed-paired-output {output.R2noProv} --untrimmed-output {output.R1noProv} {input.R1} {input.R2} > {log}
+			cutadapt -g {PROVIRUS_SEQ} -O 28 -e 0.1 --no-trim --no-indels -o {output.R1Prov} -p {output.R2Prov} --untrimmed-paired-output {output.R2noProv} --untrimmed-output {output.R1noProv} {input.R1} {input.R2} > {log}
 			"""
 			
 			
@@ -114,7 +117,7 @@ rule Find_provirus_skewer:
 	threads: 1
 	log:"log/Trim-Provirus_in_R1.log"
 	shell:"""
-			skewer -m head -r 0.1 -d 0 -l 20 -t 8 -k 28 -b -x aaaatctctagcagtggcgcccgaacag -y NNNNNNNNNNNNNNNNNNNNNNNNNNNN -o "02-provirus/{wildcards.NAME}_R1_TAG{wildcards.TAG}" {input.R1} {input.R2} 2> {log}
+			skewer -m head -r 0.1 -d 0 -l 20 -t 8 -k 28 -b -x {PROVIRUS_SEQ} -y NNNNNNNNNNNNNNNNNNNNNNNNNNNN -o "02-provirus/{wildcards.NAME}_R1_TAG{wildcards.TAG}" {input.R1} {input.R2} 2> {log}
 			"""
 	
 	
@@ -128,7 +131,7 @@ rule Find_LTR:
 	threads: 1
 	message: "Look for the LTR in R1"
 	shell: """
-			cutadapt -g GTCTGTTGTGTGACTCTGGTAAC -O 23 -e 0.1 --no-indels -o {output.R1LTR} -p {output.R2LTR} --untrimmed-paired-output {output.R2noLTR} --untrimmed-output {output.R1noLTR} {input.R1} {input.R2} > {log}
+			cutadapt -g {LTR_SEQ} -O 23 -e 0.1 --no-indels -o {output.R1LTR} -p {output.R2LTR} --untrimmed-paired-output {output.R2noLTR} --untrimmed-output {output.R1noLTR} {input.R1} {input.R2} > {log}
 			"""
 			
 rule Find_LTR_skewer:
@@ -141,7 +144,7 @@ rule Find_LTR_skewer:
 	threads: 1
 	message: "Look for the LTR in R1"
 	shell: """
-			skewer -m head -r 0.1 -d 0 -l 20 -t 8 -k 23 -b -x GTCTGTTGTGTGACTCTGGTAAC -y NNNNNNNNNNNNNNNNNNNNNNN -o "03-LTR/{wildcards.NAME}_R1_TAG{wildcards.TAG}"
+			skewer -m head -r 0.1 -d 0 -l 20 -t 8 -k 23 -b -x {LTR_SEQ} -y NNNNNNNNNNNNNNNNNNNNNNN -o "03-LTR/{wildcards.NAME}_R1_TAG{wildcards.TAG}"
 			"""
 
 rule Find_Elong:
@@ -154,7 +157,7 @@ rule Find_Elong:
 	threads: 1
 	message: "Look for the Elong in R1"
 	shell: """
-			cutadapt -g TAGAGATCCCTCAGACCCTTTTAGTCAGTGTGGAAAATCTCTA -O 43 -e 0.16 --no-indels -o {output.R1elong} -p {output.R2elong} --untrimmed-paired-output {output.R2noelong} --untrimmed-output {output.R1noelong} {input.R1} {input.R2} > {log}
+			cutadapt -g {ELONG_SEQ} -O 43 -e 0.16 --no-indels -o {output.R1elong} -p {output.R2elong} --untrimmed-paired-output {output.R2noelong} --untrimmed-output {output.R1noelong} {input.R1} {input.R2} > {log}
 			"""
 
 rule Start_with_GCA:
@@ -180,7 +183,7 @@ rule Find_Linker_R1:
 	threads: 1
 	message: "Look for the Linker in R1"
 	shell: """
-			cutadapt -a GTCCCTTAAGCGGAGCCCT -O 8 -e 0.2 --no-indels -o {output.R1Linker} -p {output.R2Linker} --untrimmed-paired-output {output.R2noLinker} --untrimmed-output {output.R1noLinker} {input.R1} {input.R2} > {log}
+			cutadapt -a {LINKER_R1_SEQ} -O 8 -e 0.2 --no-indels -o {output.R1Linker} -p {output.R2Linker} --untrimmed-paired-output {output.R2noLinker} --untrimmed-output {output.R1noLinker} {input.R1} {input.R2} > {log}
 			"""	
  	
 rule Find_Linker_R2:
@@ -193,7 +196,7 @@ rule Find_Linker_R2:
 	threads: 1
 	message: "Look for the Linker in R2"
 	shell: """
-			cutadapt -g AGGGCTCCGCTTAAGGGAC -O 19 -e 0.16 --no-indels -o {output.R2Linker} -p {output.R1Linker} --untrimmed-paired-output {output.R1noLinker} --untrimmed-output {output.R2noLinker} {input.R2} {input.R1} > {log}
+			cutadapt -g {LINKER_R2_SEQ} -O 20 -e 0.16 --no-indels -o {output.R2Linker} -p {output.R1Linker} --untrimmed-paired-output {output.R1noLinker} --untrimmed-output {output.R2noLinker} {input.R2} {input.R1} > {log}
 			"""				
 #######################################################################################
 #######################################################################################			
@@ -231,13 +234,18 @@ rule FilterSize_R1collapsed:
 		
 rule Map_R1_with_Linker :
 	input: rules.FilterSize_R1collapsed.output.filtered
-	output: mappedsam="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.sam",mapped="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.fastq", unmapped="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq", exact="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam"
+	output: mappedsam="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.sam",
+			mapped="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.fastq", 
+			unmapped="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq", 
+			exact="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam",
+			multihits="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_nomulti.sam"
 	log: met="log/mappingR1wLinker.log",summary="log/mappingR1wLinker_numbers.log"
 	threads: 8
-	message: "Mapping R1 reads that contain the linker and filter out those with mismatches in the 3 first positions after the LTR"
+	message: "Mapping R1 reads that contain the linker and filter out those with mismatches in the 3 first positions after the LTR and multihits"
 	shell: """
 			bowtie2 -N 0 -L 25 -i S,25,0 --score-min L,0,-0.16 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --no-unal --un {output.unmapped} --al {output.mapped} --met-file {log.met} {input} -S {output.mappedsam} 2> {log.summary}
-			awk -F "\\t" '(/^@/) || ($2==0 && !/XS:i:/ && !/MD:Z:[012][A-Za-z].*\t/) || ($2==16 && !/XS:i:/ && !/MD:Z:.*[A-Za-z][012]\t/) {{print $0}}' {output.mappedsam} > {output.exact}
+			awk -F "\\t" '(/^@/) || ($2==0 && !/MD:Z:[012][A-Za-z].*\t/) || ($2==16 && !/MD:Z:.*[A-Za-z][012]\t/) {{print $0}}' {output.mappedsam} > {output.exact};
+			awk -F "\\t" 'function abs(v) {{return v < 0 ? -v : v}};$0~/XS:i:/ {{AS=substr($12,6,length($12)); XS=substr($13,6,length($13));{{if((AS==0 && abs(XS)>0) || (abs(AS)+8 < abs(XS))){{print $0}}}};next}} {{print $0}}' {output.exact} > {output.multihits}
 			"""
 # awk 'function abs(v) {return v < 0 ? -v : v};$0~/XS:i:/ {AS=substr($12,6,length($12)); XS=substr($13,6,length($13));{if((AS==0 && XS<0) || (abs(AS)+0 < abs(XS))){print $0}};next} {print $0}' TM024-1-03-library-TAG3_S2_L001_R1_TAG3_mapped.sam 
 
@@ -256,7 +264,7 @@ rule Map_R1_with_Linker :
 ####
 
 rule Filter_Map_R1:
-	input: rules.Map_R1_with_Linker.output.exact
+	input: rules.Map_R1_with_Linker.output.multihits
 	output: bam=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.bam"),
 			sortbam="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
 			idx="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
@@ -268,7 +276,7 @@ rule Filter_Map_R1:
 			IScluster="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
 			ISclustersorted="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
 			IScollapsed="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
-	params: qual="10", collapsing_window="-1"
+	params: qual="0", collapsing_window="-1"
 	threads: 1
 	message:"Filtering mapped reads, converting to BED,Collapsing by 3nt and counting read abundance by IS"
 	shell: """ 
@@ -306,7 +314,8 @@ rule Find_RC_LTR_R2:
 			"""
 
 rule FilterSize_R1R2:
-	input: R1=rules.Find_RC_LTR_R2.output.trimmedLTRRCR1, R2=rules.Find_RC_LTR_R2.output.trimmedLTRRCR2
+	input: R1=rules.Find_RC_LTR_R2.output.trimmedLTRRCR1, 
+			R2=rules.Find_RC_LTR_R2.output.trimmedLTRRCR2
 	output: R1filtered="06-RCLTRR2/{NAME}_R1_TAG{TAG}_filtered.fastq",
 			R1tooshort="06-RCLTRR2/{NAME}_R1_TAG{TAG}_2short.fastq",
 			R2filtered="06-RCLTRR2/{NAME}_R2_TAG{TAG}_filtered.fastq",
@@ -323,14 +332,16 @@ rule FilterSize_R1R2:
 # Map paired end reads, trim 3' end to remove uncut linker parts, tolerate dovetail and max fragments length 800bp. Keep only concordant mapping (same Chr, <800bp).		
 	
 rule Map_R1_R2_pairs:
-	input: R1=rules.FilterSize_R1R2.output.R1filtered, R2=rules.FilterSize_R1R2.output.R2filtered
-	output: mapped="08-mappingR1R2/{NAME}_TAG{TAG}_mapped.sam", R1unal="08-mappingR1R2/{NAME}_R1_TAG{TAG}_unaligned.fastq"
+	input: R1=rules.FilterSize_R1R2.output.R1filtered,
+			R2=rules.FilterSize_R1R2.output.R2filtered
+	output: mapped="08-mappingR1R2/{NAME}_TAG{TAG}_mapped.sam",
+			R1unal="08-mappingR1R2/{NAME}_R1_TAG{TAG}_unaligned.fastq"
 	message: "Mapping R1 and R2 reads as pairs"
 	params: fragLenght="800", Trim3="5"
 	log: met="log/mapping_R1R2.log",summary="log/mapping_R1R2_numbers.log"
 	threads: 8
 	shell: """
-			bowtie2 -p {threads}  -N 0 -L 25 -i S,25,0 --score-min L,0,-0.16 --gbar 10 -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 {params.Trim3} --no-unal --al-conc "08-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "08-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -X {params.fragLenght} --no-mixed --met-file {log.met} 2> {log.summary};
+			bowtie2 -p {threads}  -N 0 -L 25 -i S,25,0 --no-discordant --score-min L,0,-0.16 --gbar 10 -x {BOWTIE2_INDEX} -1 {input.R1} -2 {input.R2} -S {output.mapped} --trim3 {params.Trim3} --no-unal --al-conc "08-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_aligned.fastq" --un-conc "08-mappingR1R2/{wildcards.NAME}_R%_TAG{wildcards.TAG}_unaligned.fastq" --dovetail -I 30 -X {params.fragLenght} --no-mixed --met-file {log.met} 2> {log.summary};
 			"""
 
 #########################################################################
@@ -338,22 +349,46 @@ rule Map_R1_R2_pairs:
 # Then keep only R1 reads from filtered out reads and co
 # 
 			
+#rule Filter_Map_R1R2_unique:
+#	input: rules.Map_R1_R2_pairs.output.mapped
+#	output: badqual = "08-mappingR1R2/{NAME}_TAG{TAG}_bad_qual.sam",
+#			confident="08-mappingR1R2/{NAME}_TAG{TAG}_qual_gt20.sam",
+#			R1_badqual= "08-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.sam" ,
+#			R1_badqualfq= "08-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.fastq"
+#	params: qual="0"
+#	message: "filtering bad quality alignments that may be multiple hits, keep R1 reads and convert to fastq."
+#	log: "log/mapping_R1R2_filtering.log"
+#	threads :1
+#	shell: """
+#			samtools view -h -q {params.qual} {input} -o {output.confident} -U {output.badqual};
+#			samtools view -h -f 64 {output.badqual} > {output.R1_badqual};
+#			samtools flagstat {output.R1_badqual} > {log};
+#			samtools view {output.R1_badqual} -b | samtools fastq - > {output.R1_badqualfq};
+#			
+#			"""
+
+
 rule Filter_Map_R1R2_unique:
 	input: rules.Map_R1_R2_pairs.output.mapped
-	output: badqual = "08-mappingR1R2/{NAME}_TAG{TAG}_bad_qual.sam",
+	output: flag=temp("08-mappingR1R2/{NAME}_TAG{TAG}_flag.sam"),
+			flagmulti="08-mappingR1R2/{NAME}_TAG{TAG}_flagmulti.sam",
+			collapsed=temp("08-mappingR1R2/{NAME}_TAG{TAG}_collapsed.sam"),
 			confident="08-mappingR1R2/{NAME}_TAG{TAG}_qual_gt20.sam",
-			R1_badqual= "08-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.sam" ,
 			R1_badqualfq= "08-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.fastq"
-	params: qual="20"
-	message: "filtering bad quality alignments that may be multiple hits, keep R1 reads and convert to fastq."
+	params: qual="0"
+	message: "Flag R1 reads with mismatches in the 3 first nucleotides according to the strand."
 	log: "log/mapping_R1R2_filtering.log"
 	threads :1
 	shell: """
-			samtools view -h -q {params.qual} {input} -o {output.confident} -U {output.badqual};
-			samtools view -h -f 64 {output.badqual} > {output.R1_badqual};
-			samtools flagstat {output.R1_badqual} > {log};
-			samtools view {output.R1_badqual} -b | samtools fastq - > {output.R1_badqualfq};
+			awk -F "\\t" '$0!~/^@/ {{if(($2==99 && /MD:Z:[012][A-Za-z].*\t/) || ($2==83 && /MD:Z:.*[A-Za-z][012]\t/)) print $0,"MISMATCH"; else print $0;next}} {{print $0}}' {input} > {output.flag};
+			awk 'function abs(v) {{return v < 0 ? -v : v}};$0~/XS:i:/ {{AS=substr($12,6,length($12)); XS=substr($13,6,length($13)); {{if(((abs(XS)-abs(AS)<=8) && AS!=0) || XS==0) print $0,"MULTIHIT"; else print $0;next}}}}; {{print $0}}' {output.flag} > {output.flagmulti};
+			awk '$0!~/^@/ {{key=$0; getline; print key "{{" $0;next}}{{print $0}}' {output.flagmulti} > {output.collapsed};
+			awk '$0!~/MISMATCH|MULTIHIT/' {output.collapsed} |awk '{{n=split($0,a,"{{"); for (i = 1; i <= n; ++i) print a[i]}}' > {output.confident};
+			awk '$0~/MULTIHIT|^@/' {output.collapsed} | awk '{{n=split($0,a,"{{"); for (i = 1; i <= n; ++i) print a[i]}}' | samtools view -h -f 64 - | samtools view - -b | samtools fastq - > {output.R1_badqualfq}
 			"""
+
+
+
 			
 #########################################################################
 # Sort SAM alignement by read name and convert to SAM then BEDPE with mate1 first for reproductibility of filtering steps.  
@@ -443,19 +478,24 @@ rule Collapse_identical_R1_noLinkerReads:
 			
 rule Map_R1_noLinker:
 		input: R1=rules.Collapse_identical_R1_noLinkerReads.output.file
-		output: mappedsam="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.sam",mapped="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.fastq",unmapped="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq", exact="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam"
-		message:"Mapping R1 reads without Linker in R1 nor R2 and R1 that were unmapped in previous steps"
+		output: mappedsam="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.sam",
+				mapped="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.fastq",
+				unmapped="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq",
+				exact="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam",
+				multihits="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_nomulti.sam"
+		message:"Mapping R1 reads without Linker in R1 nor R2 and R1 that were unmapped in previous steps  and filter out those with mismatches in the 3 first positions after the LTR and multihits"
 		threads: 8
 		log: met="log/mapping_Merged_R1only.log",summary="log/mappingR1alone_numbers.log"
 		shell: """
 				bowtie2 -N 0 -L 25 -i S,25,0 --score-min L,0,-0.16 --gbar 10 -p {threads} -x {BOWTIE2_INDEX} --trim3 5 --no-unal --un {output.unmapped} --al {output.mapped} --met-file {log.met} {input.R1} -S {output.mappedsam} 2> {log.summary}
-				awk -F "\\t" '(/^@/) || ($2==0 && !/XS:i:/ && !/MD:Z:[012][A-Za-z].*\t/) || ($2==16 && !/XS:i:/ && !/MD:Z:.*[A-Za-z][012]\t/) {{print $0}}' {output.mappedsam} > {output.exact}
+				awk -F "\\t" '(/^@/) || ($2==0 && !/MD:Z:[012][A-Za-z].*\t/) || ($2==16 && !/MD:Z:.*[A-Za-z][012]\t/) {{print $0}}' {output.mappedsam} > {output.exact};
+				awk -F "\\t" 'function abs(v) {{return v < 0 ? -v : v}};$0~/XS:i:/ {{AS=substr($12,6,length($12)); XS=substr($13,6,length($13));{{if((AS==0 && abs(XS)>0) || (abs(AS)+8 < abs(XS))){{print $0}}}};next}} {{print $0}}' {output.exact} > {output.multihits}
 				"""
 
 
 			
 rule Filter_Map_R1_noLinker:
-	input: rules.Map_R1_noLinker.output.exact
+	input: rules.Map_R1_noLinker.output.multihits
 	output: bam="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.bam",
 			sortbam="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
 			idx="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
@@ -478,7 +518,7 @@ rule Filter_Map_R1_noLinker:
 			awk 'function abs(a){{return ((a < 0) ? -a : a)}} OFS="\\t" {{split($4,a,"x");print $0,0,a[2]}}' {output.bed} > {output.ISsortednum};
 			awk 'OFS="\\t" {{if($6=="-") {{print $1,$3-1,$3,$4,$5,$6,$7,$8}} else {{print $1,$2,$2+1,$4,$5,$6,$7,$8}}}}' {output.ISsortednum} > {output.IS};
 			bedtools sort -i {output.IS} > {output.ISsorted};
-			bedtools cluster -s  -i {output.ISsorted} > {output.IScluster};
+			bedtools cluster -s -d -1 -i {output.ISsorted} > {output.IScluster};
 			sort -k 1,1 -k 2,2n -k 3,3n -k 6,6 -k 7,7n {output.IScluster} > {output.ISclustersorted};
 			bedtools groupby -i {output.ISclustersorted}  -g 9,7 -c 1,2,3,4,5,6,7,8,8,9 -o distinct,mode,mode,collapse,median,distinct,distinct,sum,count,distinct  | cut -f 3- > {output.IScollapsedSize};
 			bedtools groupby -i {output.IScollapsedSize}  -g 10 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
@@ -498,7 +538,7 @@ rule QualIS:
 			merged_sorted = "09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted.bed",
 			merged_sorted_collapsed= "09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted_collapsed.bed"
 	message: "Merging and collapsing IS from each step"
-	threads: 8
+	threads: 1
 	log: "log/qualitativeIS.log"
 	shell: """
 			cat  {input.R1full} {input.R1alone} {input.R1R2} > {output.merged};
@@ -521,16 +561,22 @@ rule QualIS:
 #		"""
 	
 rule QuantIS:
-	input:R1full=rules.Filter_Map_R1.output.IScollapsed,
-		R1R2=rules.Filter_Map_R1R2.output.IScollapsed
+	input:R1full=rules.Filter_Map_R1.output.ISclustersorted,
+		R1R2=rules.Filter_Map_R1R2.output.IScollapsedSize
 	output: merged="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_merged.bed", 
 			merged_corrected="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_merged_corrected.bed",
-			collapsed = "09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_collapsed.bed"
+			IScluster="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_cluster.bed",
+			ISclustersorted="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_cluster_sorted.bed",
+			IScollapsedSize="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_collapsedSize.bed",
+			IScollapsed="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS.bed"
 	threads: 1
 	shell: """
 			cat {input.R1full} {input.R1R2} > {output.merged};
-			awk '{{print "chr"$0}}' {output.merged} > {output.merged_corrected};
-			bedtools sort -i {output.merged_corrected} | bedtools merge -d -1 -s -c 1,2,3,4,5,6,7,8 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct -i - | cut -f 5- > {output.collapsed}
+			awk 'OFS="\\t" {{print "chr"$0}}' {output.merged} > {output.merged_corrected};
+			awk 'OFS="\\t" {{print $1,$2,$3,$4,$5,$6,$7,$8}}' {output.merged_corrected} | bedtools cluster -s -d -1 -i - > {output.IScluster};
+			sort -k 9,9n -k 7,7n {output.IScluster} > {output.ISclustersorted};
+			bedtools groupby -i {output.ISclustersorted}  -g 9,7 -c 1,2,3,4,5,6,7,8,9 -o distinct,mode,mode,collapse,median,distinct,distinct,sum,distinct  | cut -f 3- > {output.IScollapsedSize};
+			bedtools groupby -i {output.IScollapsedSize} -g 9 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
 			"""
 			
 			
@@ -551,7 +597,7 @@ rule GetAnnotations_UCSC:
 	threads: 1
 	message: "Downloading annotation from UCSC"
 	shell : """
-			xargs -i wget -nc -P {output.folder} '{{}}'  < ../Scripts/hg19_annotationUCSC_urls.txt 2> {log};
+			xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/hg19_annotationUCSC_urls.txt 2> {log};
 			gunzip {output.folder}/*.gz
 			"""
 			
@@ -561,7 +607,7 @@ rule GetAnnotations_HGNC:
 	threads: 1
 	message: "Downloading annotation from HGNC"
 	shell : """
-			perl ../Scripts/retreive_HUGO.pl > {output.HGNC};
+			perl {SCRIPTS}/retreive_HUGO.pl > {output.HGNC};
 			"""
 			
 rule GetAnnotations_Ensembl:	
@@ -571,7 +617,7 @@ rule GetAnnotations_Ensembl:
 	log: "log/Ensembl_remote_wget.log"
 	message: "Downloading annotation from Ensembl"
 	shell:"""
-			xargs -i wget -nc -P {output.folder} '{{}}'  < ../Scripts/hg19_annotationEnsembl_urls.txt 2> {log};
+			xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/hg19_annotationEnsembl_urls.txt 2> {log};
 			gunzip {output.folder}/*.gz
 			"""
 
@@ -582,7 +628,7 @@ rule GetAnnotations_RefSeq:
 	log: "log/RefSeq_remote_wget.log"
 	message: "Downloading annotation from RefSeq"
 	shell: """
-			 xargs -i wget -nc -P {output.folder} '{{}}'  < ../Scripts/hg19_annotationRefSeq_urls.txt 2> {log};
+			 xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/hg19_annotationRefSeq_urls.txt 2> {log};
 			 gunzip {output.folder}/*.gz
 			"""
 			
@@ -594,7 +640,7 @@ rule GetAnnotations_GenCode:
 	log: "log/Gencode_remote_wget.log"
 	message: "Downloading annotation from GencodeV19"
 	shell: """
-			xargs -i wget -nc -P {output.folder} '{{}}'  < ../Scripts/hg19_annotationGencodeV19_urls.txt 2> {log};
+			xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/hg19_annotationGencodeV19_urls.txt 2> {log};
 			gunzip {output.folder}/*.gz
 			"""	
 			
@@ -800,13 +846,13 @@ rule QC_stat:
 			find -type f -regex ".+\.fastq\(.gz\)?$" -exec sh -c 'fastq-stats -s 0 {{}} > {{}}.fqstat' \;
 			"""
 			
-#find -type f -regex ".+\.fastq.gz$" -exec sh -c 'fastq-stats -s 0 {{}} > {{}}.fqstat' \;
 #fastqc -t 8 {input} --adapters ../dataset/contaminants/adapter_list.txt -o {output.QC};
 #multiqc . -f;
 
 
+
 rule MakeReport:
-	input:  rules.QuantIS.output.collapsed, rules.QualIS.output.merged_sorted_collapsed, rules.QC_stat.output
+	input:  rules.QuantIS.output.IScollapsed, rules.QualIS.output.merged_sorted_collapsed, rules.QC_stat.output, rules.AnnotateISRefSeq.output
 	output: touch("{NAME}_TAG{TAG}_report.pdf")
 	threads: 1
 	
