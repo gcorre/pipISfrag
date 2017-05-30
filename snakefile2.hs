@@ -19,7 +19,7 @@
 #
 # docker run --rm --hostname "fragIS" -w /home/ -it -v /d/:/home/ gc/frag:V2 bash
 
-print("#~~~~~~~~Version 16/05/2017~~~~~~~~#");
+print("#~~~~~~~~Version 30/05/2017~~~~~~~~#");
 print("");
 print("#       #    ##    ######    #######");
 print(" #     #     ##    ##        ##   ##");
@@ -37,12 +37,13 @@ min_version("3.11.2")
 
 
 
-configfile: "./config.yml"
+configfile: "/home/tempGC/Scripts/config_lenti_hg19.yml"
 
 BOWTIE2_INDEX=config["BOWTIE2_INDEX"]
 SCRIPTS=config["SCRIPTS"]
 DATASET=config["DATASET"]
 GENOME=config["GENOME"]
+GENOME_DATASETS=config["GENOME_DATASETS"]
 
 PROVIRUS_SEQ=config["PROVIRUS_SEQ"]
 LTR_SEQ=config["LTR_SEQ"]
@@ -849,10 +850,126 @@ rule QC_stat:
 #fastqc -t 8 {input} --adapters ../dataset/contaminants/adapter_list.txt -o {output.QC};
 #multiqc . -f;
 
+rule motif:
+	input: R1R2 = rules.Filter_Map_R1R2.output.bed, R1 = rules.Filter_Map_R1.output.bed
+	output: R1R2fragment = ("09-qualitativeIS/{NAME}_TAG{TAG}_R1R2_full_aligment.bed"),
+			mergedfragm=("09-qualitativeIS/{NAME}_TAG{TAG}_R1R1R2_merged.bed"),
+			ISpos=("09-qualitativeIS/{NAME}_TAG{TAG}_IS_position.bed"),
+			Ligpos=("09-qualitativeIS/{NAME}_TAG{TAG}_ligation_position.bed"),
+			ISposslop=temp("09-qualitativeIS/{NAME}_TAG{TAG}_IS_position_slop.bed"),
+			Ligposslop=temp("09-qualitativeIS/{NAME}_TAG{TAG}_ligation_position_slop.bed"),
+			ISposfa=temp("09-qualitativeIS/{NAME}_TAG{TAG}_IS_position.fa"),
+			Ligposfa=temp("09-qualitativeIS/{NAME}_TAG{TAG}_ligation_position.fa"),
+			ISmotif = "09-qualitativeIS/{NAME}_TAG{TAG}_IS_position_motif.png",
+			Ligmotif = "09-qualitativeIS/{NAME}_TAG{TAG}_ligation_position_motif.png"
+	message: "Plot nucleotides proportion around IS and ligation sites" 
+	threads:1
+	params: window=20
+	shell: """
+			awk 'OFS="\\t" {{if($9=="+") {{print $1,$2,$6,$7,$8,$9}} else {{print $1,$5,$3,$7,$8,$9}}}}' {input.R1R2} | sort -k 1,1 -k 2,2n > {output.R1R2fragment};
+			cat  {input.R1} {output.R1R2fragment} | sort -k 1,1 -k 2,2n > {output.mergedfragm};
+			awk 'OFS="\\t" {{if($6=="-") {{print "chr"$1,$3-1,$3,$4,$5,$6}} else {{print "chr"$1,$2,$2+1,$4,$5,$6}}}}' {output.mergedfragm} | bedtools sort -i - | bedtools merge -i - -s -d -1 > {output.ISpos};
+			awk 'OFS="\\t" {{if($6=="-") {{print "chr"$1,$2,$2+1,$4,$5,$6}} else {{print "chr"$1,$3-1,$3,$4,$5,$6}}}}' {output.mergedfragm} | bedtools sort -i - | bedtools merge -i - -s -d -1 > {output.Ligpos};
+			
+			bedtools slop -i {output.ISpos} -b {params.window} -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.all.chrom.sizes > {output.ISposslop};
+			bedtools slop -i {output.Ligpos} -b {params.window} -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.all.chrom.sizes > {output.Ligposslop};
 
+			bedtools getfasta -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.ISposslop} -fo {output.ISposfa};
+			bedtools getfasta -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.Ligposslop} -fo {output.Ligposfa};
 
+			weblogo -f {output.ISposfa} -s large -o {output.ISmotif} -F png --fontsize 14 -U probability -c classic;
+			weblogo -f {output.Ligposfa} -s large -o {output.Ligmotif} -F png --fontsize 14 -U probability -c classic;
+			"""
+
+rule Features_association:
+	input: rules.QualIS.output.merged_sorted_collapsed
+	output: random=("10-randomIS/{NAME}_TAG{TAG}_randomIS.bed"),
+			randomRenamed="10-randomIS/{NAME}_TAG{TAG}_randomIS_renamed.bed",
+			MergedRndQualiIS= "10-randomIS/{NAME}_TAG{TAG}_MergedQualIS_Rnd.bed",
+			slop10="10-randomIS/{NAME}_TAG{TAG}_slop10kb.bed",
+			slop100="10-randomIS/{NAME}_TAG{TAG}_slop100kb.bed",
+			slop1M="10-randomIS/{NAME}_TAG{TAG}_slop1Mb.bed",
+			Genedensity10="10-randomIS/{NAME}_TAG{TAG}_GeneDens10kb.bed",
+			Genedensity100="10-randomIS/{NAME}_TAG{TAG}_GeneDens100kb.bed",
+			Genedensity1M="10-randomIS/{NAME}_TAG{TAG}_GeneDens1M.bed",
+			GCcontent10="10-randomIS/{NAME}_TAG{TAG}_GCcontent10kb.bed",
+			GCcontent100="10-randomIS/{NAME}_TAG{TAG}_GCcontent100kb.bed",
+			GCcontent1M="10-randomIS/{NAME}_TAG{TAG}_GCcontent1Mb.bed",
+			DNAse10="10-randomIS/{NAME}_TAG{TAG}_DNAseI10kb.bed",
+			DNAse100="10-randomIS/{NAME}_TAG{TAG}_DNAseI100kb.bed",
+			DNAse1M="10-randomIS/{NAME}_TAG{TAG}_DNAseI1Mb.bed",
+			CpG10="10-randomIS/{NAME}_TAG{TAG}_CpG10kb.bed",
+			CpG100="10-randomIS/{NAME}_TAG{TAG}_CpG100kb.bed",
+			CpG1M="10-randomIS/{NAME}_TAG{TAG}_CpG1Mb.bed",	
+			distTSS="10-randomIS/{NAME}_TAG{TAG}_distTSS.bed",						
+	message: "Generating random IS for statistics"
+	params: 
+	threads:1
+	shell: """
+			bedtools random -n $(wc -l {input} | awk '{{print $1}}') -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes -l 1 | sort -k 1,1 -k 2,2n -k 3,3n -u  > {output.random};
+			awk 'OFS="\\t" {{print $1,$2,$3,"random"NR,$5,$6}}' {output.random} > {output.randomRenamed};
+			cat {output.randomRenamed} {input} | sort -k1,1 -k2,2n -k3,3n | cut -f 1-6 | awk 'OFS= "\\t" {{print $1,$2,$3,$4,0,$6}}' > {output.MergedRndQualiIS};
+			
+			bedtools slop -i {output.MergedRndQualiIS} -b 5000 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop10};
+			bedtools slop -i {output.MergedRndQualiIS} -b 50000 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop100};
+			bedtools slop -i {output.MergedRndQualiIS} -b 500000 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop1M};
+			
+			bedtools intersect -c -a {output.slop10} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity10};
+			bedtools intersect -c -a {output.slop100} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity100};
+			bedtools intersect -c -a {output.slop1M} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity1M};
+			
+			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop10} -C > {output.GCcontent10};
+			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop100} -C > {output.GCcontent100};
+			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop1M} -C > {output.GCcontent1M};
+			
+			bedtools intersect -c -a {output.slop10} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse10};
+			bedtools intersect -c -a {output.slop100} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse100};
+			bedtools intersect -c -a {output.slop1M} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse1M};
+			
+			bedtools intersect -c -a {output.slop10} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG10};
+			bedtools intersect -c -a {output.slop100} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG100};
+			bedtools intersect -c -a {output.slop1M} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG1M};					
+			
+			bedtools closest -a {output.MergedRndQualiIS} -b {ANNOTATION}/RefSeq/refFlatTSSsorted.bed -D b -t first > {output.distTSS};
+			"""
+					
+##################################
+### get CHiPSeq datasets from NIH Roadmap Epigenomics Project for human Mobilized CD34 cells
+
+rule Prepare_epiTracks:
+	input:
+	output: DATASET+"/epigenetics/rule.txt"
+	message: "Converting wig files to bigWig"
+	threads:8
+	shell: """
+			
+			find {DATASET}/epigenetics/ -type f -name "*.wig.gz" -print0 | xargs -0 -n1 -P{threads} -I {{}} {SCRIPTS}/wigTobigwig.sh {{}} {ANNOTATION}/RefSeq/hg19.chrom.sizes;
+			rm {DATASET}/epigenetics/*.wig.gz;
+			touch({output}
+			"""
+		
+rule epigenetic_association:
+	input: tracks=rules.Prepare_epiTracks.output,
+			IS10kb=rules.Features_association.output.slop10,
+			IS100kb=rules.Features_association.output.slop100,
+			IS1M=rules.Features_association.output.slop1M
+	output: npz10="10-randomIS/{NAME}_TAG{TAG}_epi_10kb.npz", 
+			tab10="10-randomIS/{NAME}_TAG{TAG}_epi_10kb.tab",
+			npz100="10-randomIS/{NAME}_TAG{TAG}_epi_100kb.npz",
+			tab100="10-randomIS/{NAME}_TAG{TAG}_epi_100kb.tab",
+			npz1M="10-randomIS/{NAME}_TAG{TAG}_epi_1M.npz",
+			tab1M="10-randomIS/{NAME}_TAG{TAG}_epi_1M.tab",
+	message: "Compute mean epigenetic signal in each bed interval and for each track"
+	threads:1
+	log:
+	shell: """
+			 multiBigwigSummary BED-file -b {DATASET}/epigenetics/*.bw -out {output.npz10} --BED {input.IS10kb} --outRawCounts {output.tab10};
+			 multiBigwigSummary BED-file -b {DATASET}/epigenetics/*.bw -out {output.npz100} --BED {input.IS100kb} --outRawCounts {output.tab100};
+			 multiBigwigSummary BED-file -b {DATASET}/epigenetics/*.bw -out {output.npz1M} --BED {input.IS1M} --outRawCounts {output.tab1M}
+			"""			
+			
 rule MakeReport:
-	input:  rules.QuantIS.output.IScollapsed, rules.QualIS.output.merged_sorted_collapsed, rules.QC_stat.output, rules.AnnotateISRefSeq.output
+	input:  rules.AnnotateISRefSeq.output, rules.Features_association.output.Genedensity1M,rules.epigenetic_association.output, rules.QuantIS.output.IScollapsed, rules.QualIS.output.merged_sorted_collapsed, rules.motif.output
 	output: touch("{NAME}_TAG{TAG}_report.pdf")
 	threads: 1
 	

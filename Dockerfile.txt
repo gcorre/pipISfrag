@@ -69,7 +69,9 @@ RUN conda install -y ea-utils=1.1.2.537
 
 RUN conda install -y ghostscript
 
-RUN conda install multiqc
+RUN conda install -y multiqc
+
+RUN conda install -y deeptools
 
 
 RUN cpan GD::Graph::bars
@@ -77,6 +79,6 @@ RUN cpan PerlIO::gzip
 RUN cpan LWP::Simple module
 
 RUN pip install --upgrade pip
-RUN pip install --user numpy scipy matplotlib ipython jupyter pandas sympy nose
+RUN pip install --user numpy scipy matplotlib ipython jupyter pandas sympy nose weblogo
 
 

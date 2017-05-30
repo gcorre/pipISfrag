@@ -1,5 +1,7 @@
 BOWTIE2_INDEX:
  "/home/references/genomes/homo_sapiens/hg19_GRCh37/index_bowtie2/GRCh37.75"
+GENOME_DATASETS:
+  "/home/references/genomes/homo_sapiens/hg19_GRCh37/"
 SCRIPTS:
  "/home/tempGC/Scripts"
 DATASET:
