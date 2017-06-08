@@ -17,7 +17,7 @@
 # run these commands to run the pipeline and any post-processing scripts like annotation or reporting.
 
 docker run --rm -v /home/:/home/ -w $(pwd)  genethon/fragvisa sh /home/tempGC/Scripts/start_snake.sh $PWD;
-docker run --rm -v /home/:/home/ -w $(pwd)  gc/stat_is Rscript /home/tempGC/Scripts/full_annotation.r .;
+docker run --rm -v /home/:/home/ -w $(pwd)  gc/stat_is Rscript /home/tempGC/Scripts/Master_r.r $(pwd);
 
 # Explanations:
 # run the docker image "fragvisa", with folder mapping home(boot2docker which was mapped to d:) to the home folder of the container. Every path is now transparent.

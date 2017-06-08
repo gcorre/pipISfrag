@@ -698,9 +698,6 @@ rule FormatAnnotationUCSC:
 			bedtools flank -s -l 800 -r 0 -g {input.gensize} -i {output.UCSCProx} > {output.UCSCDist};
 			awk 'OFS="\\t" {{split($9,a,",");split($10,b,","); for (i = 1; i <= $8; ++i) {{if($3=="-") {{k=$8-i+1}} else {{k=i}}; print $2,a[i],b[i],$1"_exon_"k,$1,$3}}}}' {input.known} | bedtools sort -i - > {output.UCSCExons}
 			"""
-#join  -16 -21 -e NULL -t $'\t' <(sort -k 6,6 knownCanonical.txt) <(sort -k 1,1 kgXref.txt) > annotatedUCSC.txt -a1
-
-
 
 
 rule FormatAnnotationHGNC:
@@ -886,18 +883,32 @@ rule Features_association:
 	output: random=("10-randomIS/{NAME}_TAG{TAG}_randomIS.bed"),
 			randomRenamed="10-randomIS/{NAME}_TAG{TAG}_randomIS_renamed.bed",
 			MergedRndQualiIS= "10-randomIS/{NAME}_TAG{TAG}_MergedQualIS_Rnd.bed",
+			slop01="10-randomIS/{NAME}_TAG{TAG}_slop01kb.bed",
+			slop1="10-randomIS/{NAME}_TAG{TAG}_slop1kb.bed",
 			slop10="10-randomIS/{NAME}_TAG{TAG}_slop10kb.bed",
 			slop100="10-randomIS/{NAME}_TAG{TAG}_slop100kb.bed",
 			slop1M="10-randomIS/{NAME}_TAG{TAG}_slop1Mb.bed",
+			
+			Genedensity01="10-randomIS/{NAME}_TAG{TAG}_GeneDens01kb.bed",
+			Genedensity1="10-randomIS/{NAME}_TAG{TAG}_GeneDens1kb.bed",			
 			Genedensity10="10-randomIS/{NAME}_TAG{TAG}_GeneDens10kb.bed",
 			Genedensity100="10-randomIS/{NAME}_TAG{TAG}_GeneDens100kb.bed",
-			Genedensity1M="10-randomIS/{NAME}_TAG{TAG}_GeneDens1M.bed",
+			Genedensity1M="10-randomIS/{NAME}_TAG{TAG}_GeneDens1Mb.bed",
+
+			GCcontent01="10-randomIS/{NAME}_TAG{TAG}_GCcontent01kb.bed",
+			GCcontent1="10-randomIS/{NAME}_TAG{TAG}_GCcontent1kb.bed",			
 			GCcontent10="10-randomIS/{NAME}_TAG{TAG}_GCcontent10kb.bed",
 			GCcontent100="10-randomIS/{NAME}_TAG{TAG}_GCcontent100kb.bed",
 			GCcontent1M="10-randomIS/{NAME}_TAG{TAG}_GCcontent1Mb.bed",
+			
+			DNAse01="10-randomIS/{NAME}_TAG{TAG}_DNAseI01kb.bed",
+			DNAse1="10-randomIS/{NAME}_TAG{TAG}_DNAseI1kb.bed",				
 			DNAse10="10-randomIS/{NAME}_TAG{TAG}_DNAseI10kb.bed",
 			DNAse100="10-randomIS/{NAME}_TAG{TAG}_DNAseI100kb.bed",
 			DNAse1M="10-randomIS/{NAME}_TAG{TAG}_DNAseI1Mb.bed",
+			
+			CpG01="10-randomIS/{NAME}_TAG{TAG}_CpG01kb.bed",
+			CpG1="10-randomIS/{NAME}_TAG{TAG}_CpG1kb.bed",			
 			CpG10="10-randomIS/{NAME}_TAG{TAG}_CpG10kb.bed",
 			CpG100="10-randomIS/{NAME}_TAG{TAG}_CpG100kb.bed",
 			CpG1M="10-randomIS/{NAME}_TAG{TAG}_CpG1Mb.bed",	
@@ -910,22 +921,32 @@ rule Features_association:
 			awk 'OFS="\\t" {{print $1,$2,$3,"random"NR,$5,$6}}' {output.random} > {output.randomRenamed};
 			cat {output.randomRenamed} {input} | sort -k1,1 -k2,2n -k3,3n | cut -f 1-6 | awk 'OFS= "\\t" {{print $1,$2,$3,$4,0,$6}}' > {output.MergedRndQualiIS};
 			
+			bedtools slop -i {output.MergedRndQualiIS} -b 50 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop01};
+			bedtools slop -i {output.MergedRndQualiIS} -b 500 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop1};
 			bedtools slop -i {output.MergedRndQualiIS} -b 5000 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop10};
 			bedtools slop -i {output.MergedRndQualiIS} -b 50000 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop100};
 			bedtools slop -i {output.MergedRndQualiIS} -b 500000 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop1M};
 			
+			bedtools intersect -c -a {output.slop01} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity01};
+			bedtools intersect -c -a {output.slop1} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity1};
 			bedtools intersect -c -a {output.slop10} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity10};
 			bedtools intersect -c -a {output.slop100} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity100};
 			bedtools intersect -c -a {output.slop1M} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity1M};
 			
+			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop01} -C > {output.GCcontent01};
+			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop1} -C > {output.GCcontent1};
 			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop10} -C > {output.GCcontent10};
 			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop100} -C > {output.GCcontent100};
 			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop1M} -C > {output.GCcontent1M};
 			
+			bedtools intersect -c -a {output.slop01} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse01};
+			bedtools intersect -c -a {output.slop1} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse1};
 			bedtools intersect -c -a {output.slop10} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse10};
 			bedtools intersect -c -a {output.slop100} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse100};
 			bedtools intersect -c -a {output.slop1M} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse1M};
 			
+			bedtools intersect -c -a {output.slop01} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG01};
+			bedtools intersect -c -a {output.slop1} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG1};
 			bedtools intersect -c -a {output.slop10} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG10};
 			bedtools intersect -c -a {output.slop100} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG100};
 			bedtools intersect -c -a {output.slop1M} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG1M};					
@@ -945,11 +966,14 @@ rule Prepare_epiTracks:
 			
 			find {DATASET}/epigenetics/ -type f -name "*.wig.gz" -print0 | xargs -0 -n1 -P{threads} -I {{}} {SCRIPTS}/wigTobigwig.sh {{}} {ANNOTATION}/RefSeq/hg19.chrom.sizes;
 			rm {DATASET}/epigenetics/*.wig.gz;
-			touch({output}
+			touch {output};
 			"""
-		
+
+
 rule epigenetic_association:
 	input: tracks=rules.Prepare_epiTracks.output,
+			IS01kb=rules.Features_association.output.slop01,
+			IS1kb=rules.Features_association.output.slop1,
 			IS10kb=rules.Features_association.output.slop10,
 			IS100kb=rules.Features_association.output.slop100,
 			IS1M=rules.Features_association.output.slop1M
@@ -957,19 +981,25 @@ rule epigenetic_association:
 			tab10="10-randomIS/{NAME}_TAG{TAG}_epi_10kb.tab",
 			npz100="10-randomIS/{NAME}_TAG{TAG}_epi_100kb.npz",
 			tab100="10-randomIS/{NAME}_TAG{TAG}_epi_100kb.tab",
-			npz1M="10-randomIS/{NAME}_TAG{TAG}_epi_1M.npz",
-			tab1M="10-randomIS/{NAME}_TAG{TAG}_epi_1M.tab",
+			npz1M="10-randomIS/{NAME}_TAG{TAG}_epi_1Mb.npz",
+			tab1M="10-randomIS/{NAME}_TAG{TAG}_epi_1Mb.tab",
+			npz01="10-randomIS/{NAME}_TAG{TAG}_epi_01kb.npz",
+			tab01="10-randomIS/{NAME}_TAG{TAG}_epi_01kb.tab",
+			npz1="10-randomIS/{NAME}_TAG{TAG}_epi_1kb.npz",
+			tab1="10-randomIS/{NAME}_TAG{TAG}_epi_1kb.tab",
 	message: "Compute mean epigenetic signal in each bed interval and for each track"
-	threads:1
+	threads:8
 	log:
 	shell: """
-			 multiBigwigSummary BED-file -b {DATASET}/epigenetics/*.bw -out {output.npz10} --BED {input.IS10kb} --outRawCounts {output.tab10};
-			 multiBigwigSummary BED-file -b {DATASET}/epigenetics/*.bw -out {output.npz100} --BED {input.IS100kb} --outRawCounts {output.tab100};
-			 multiBigwigSummary BED-file -b {DATASET}/epigenetics/*.bw -out {output.npz1M} --BED {input.IS1M} --outRawCounts {output.tab1M}
+			multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz01} --BED {input.IS01kb} --outRawCounts {output.tab01};
+			multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz1} --BED {input.IS1kb} --outRawCounts {output.tab1};
+			 multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz10} --BED {input.IS10kb} --outRawCounts {output.tab10};
+			 multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz100} --BED {input.IS100kb} --outRawCounts {output.tab100};
+			 multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz1M} --BED {input.IS1M} --outRawCounts {output.tab1M}
 			"""			
 			
 rule MakeReport:
-	input:  rules.AnnotateISRefSeq.output, rules.Features_association.output.Genedensity1M,rules.epigenetic_association.output, rules.QuantIS.output.IScollapsed, rules.QualIS.output.merged_sorted_collapsed, rules.motif.output
+	input:  rules.QC_stat.output, rules.AnnotateISRefSeq.output ,rules.Features_association.output.Genedensity1M,rules.epigenetic_association.output, rules.QuantIS.output.IScollapsed, rules.QualIS.output.merged_sorted_collapsed, rules.motif.output
 	output: touch("{NAME}_TAG{TAG}_report.pdf")
 	threads: 1
 	
