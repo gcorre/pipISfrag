@@ -101,10 +101,15 @@ correspondance$pattern <- str_replace(string=correspondance$pattern,pattern   = 
 
 for(i in 1:nrow(correspondance)){
   print(i)
-  correspondance$"Sample"[i] <- grep(all_counts$Sample,pattern = correspondance$pattern[i],value = T)
+  x <- grep(all_counts$Sample,pattern = correspondance$pattern[i],value = T)
+  if(length(x)>0){
+  correspondance$"Sample"[i] <- x
+  } else{
+    correspondance$"Sample"[i] <- ""
+  }
 }
 
-correspondance <- correspondance %>% select(Sample,description,parent,Step)
+correspondance <- correspondance %>% select(Sample,description,parent,Step) %>% filter(Sample !="")
 
 all_counts <- all_counts %>% left_join(correspondance, by = "Sample") %>% filter(!is.na(description)) %>% mutate(reads = as.numeric(reads))
 

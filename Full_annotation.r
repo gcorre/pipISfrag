@@ -12,7 +12,7 @@ Sample_name <- str_replace(basename(grep(FILES,pattern = "distTSS",value = T)),p
 All_annot <- read.delim(grep(FILES,pattern = "_IntragenicIS.txt",value = T),header = F)
 names(All_annot) <- c("Chr_IS","Start_IS","Stop_IS","Name_IS","Score_IS","Strand_IS","ReadCount_IS","Database", "Chr_Gene","Start_Gene","Stop_Gene","RefSeq","Score_Gene","Strand_Gene")
 
-refFlat <- read.delim("../../dataset/hg19/2017-04-03/RefSeq/refFlat.txt", header = F, col.names = c("GeneSymbol","RefSeq","Chr_Gene","Strand","TSS_Start","TSS_Stop","CDS_Start","CDS_Stop","ExonCount","Exon_Start","Exon_Stop"))
+refFlat <- read.delim(paste(Annotation_path,"RefSeq/refFlat.txt",sep = ""), header = F, col.names = c("GeneSymbol","RefSeq","Chr_Gene","Strand","TSS_Start","TSS_Stop","CDS_Start","CDS_Stop","ExonCount","Exon_Start","Exon_Stop"))
 # 
 # HGNC <- read.delim("./dataset/hg19/2017-04-03/HGNC/HGNC.txt", header = T) %>% filter(Status == "Approved")
 

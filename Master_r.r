@@ -20,6 +20,8 @@ require(colorRamps)
 
 # 
 
+
+
 args = commandArgs(trailingOnly=TRUE)
 if (length(args)==0) {
   stop("Usage : Rscript script.r pwd", call.=FALSE)
@@ -29,11 +31,15 @@ print(args[1])
 
 setwd(args[1])
 
-# perfom the full annotation with intron/exon
+Annotation_path <- str_replace(grep(scan("Info.txt",sep = "\n",what = "character"),pattern = "Anno",value = T),pattern = "Annotation_path:",replacement = "")
+
+
+
+print("perfom the full annotation with intron/exon")
 source("/home/tempGC/Scripts/Full_annotation.r")
 
-# perfom epigenetic annotation
+print("perfom epigenetic annotation")
 source("/home/tempGC/Scripts/Epigenetic_ROC.R")
 
-# Make a report
+print("Make a report")
 source("/home/tempGC/Scripts/Report.r")

@@ -19,7 +19,7 @@
 #
 # docker run --rm --hostname "fragIS" -w /home/ -it -v /d/:/home/ gc/frag:V2 bash
 
-print("#~~~~~~~~Version 30/05/2017~~~~~~~~#");
+print("#~~~~~~~~Version 05/07/2017~~~~~~~~#");
 print("");
 print("#       #    ##    ######    #######");
 print(" #     #     ##    ##        ##   ##");
@@ -39,11 +39,10 @@ min_version("3.11.2")
 
 configfile: "/home/tempGC/Scripts/config_lenti_hg19.yml"
 
-BOWTIE2_INDEX=config["BOWTIE2_INDEX"]
+
 SCRIPTS=config["SCRIPTS"]
-DATASET=config["DATASET"]
 GENOME=config["GENOME"]
-GENOME_DATASETS=config["GENOME_DATASETS"]
+BASE=config["REFERENCE_BASE"]
 
 PROVIRUS_SEQ=config["PROVIRUS_SEQ"]
 LTR_SEQ=config["LTR_SEQ"]
@@ -52,7 +51,7 @@ LINKER_R1_SEQ=config["LINKER_R1_SEQ"]
 LINKER_R2_SEQ=config["LINKER_R2_SEQ"]
 
 
-
+BOWTIE2_INDEX=BASE+"/"+GENOME+"/genome/bowtie2/"+GENOME
 
 
 
@@ -61,7 +60,7 @@ from datetime import date
 #TODAY=str(date.today())
 TODAY="2017-04-03"
 
-ANNOTATION=DATASET+"/"+GENOME+"/"+TODAY+"/"
+ANNOTATION="/home/tempGC/References/"+GENOME+"/annotation/"+TODAY+"/"
 
 ###########################################################
 ### this define file name and extract TAG
@@ -69,10 +68,10 @@ ANNOTATION=DATASET+"/"+GENOME+"/"+TODAY+"/"
 ### Example : 1DREP-BM26-6mo_TAG12_R1_001.fastq.gz
 
 from glob import glob;
-FILES = glob('*_R[1-2]_*.fastq.gz');
+FILES0= glob('*_R[1-2]_*.fastq.gz');
 import re;
-TRAILING=list(set([re.search('_([0-9]+).fastq.gz',FILES[0]).group(1) for w in FILES]))[0]
-FILES=[re.sub('_R[1-2]_[0-9]+.fastq.gz', '',w) for w in FILES];
+TRAILING=list(set([re.search('_([0-9]+).fastq.gz',FILES0[0]).group(1) for w in FILES0]))[0]
+FILES=[re.sub('_R[1-2]_[0-9]+.fastq.gz', '',w) for w in FILES0];
 SAMPLE=list(set(FILES))[0];
 TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 ###########################################################
@@ -97,7 +96,7 @@ rule Demultiplex_TAGS:
 	threads: 1
 	message: "Demultiplexing according to TAGs list"
 	shell: """
-			 fastq-multx -B {DATASET}/illuminaTAGs_eautils.txt -b -x -m 1 {input.R1} {input.R2} -o 01-Demultiplex/{wildcards.NAME}_R1_%.fastq.gz 01-Demultiplex/{wildcards.NAME}_R2_%.fastq.gz > {log};
+			 fastq-multx -B {BASE}/TAGS/illuminaTAGs_eautils.txt -b -x -m 1 {input.R1} {input.R2} -o 01-Demultiplex/{wildcards.NAME}_R1_%.fastq.gz 01-Demultiplex/{wildcards.NAME}_R2_%.fastq.gz > {log};
 			"""
 			
 			
@@ -126,8 +125,8 @@ rule Find_LTR:
 	input: R1=rules.Find_provirus_skewer.output.R1noProv, R2=rules.Find_provirus_skewer.output.R2noProv
 	output: R1LTR="03-LTR/{NAME}_R1_TAG{TAG}_LTR.fastq",
 			R2LTR="03-LTR/{NAME}_R2_TAG{TAG}_LTR.fastq", 
-			R1noLTR="03-LTR/{NAME}_R1_TAG{TAG}_noLTR.fastq", 
-			R2noLTR="03-LTR/{NAME}_R2_TAG{TAG}_noLTR.fastq"
+			R1noLTR=temp("03-LTR/{NAME}_R1_TAG{TAG}_noLTR.fastq"), 
+			R2noLTR=temp("03-LTR/{NAME}_R2_TAG{TAG}_noLTR.fastq")
 	log:"log/Trim-LTR_in_R1.log"
 	threads: 1
 	message: "Look for the LTR in R1"
@@ -138,9 +137,9 @@ rule Find_LTR:
 rule Find_LTR_skewer:
 	input: R1=rules.Find_provirus_skewer.output.R1noProv, R2=rules.Find_provirus_skewer.output.R2noProv
 	output: R1LTR="03-LTR/{NAME}_R1_TAG{TAG}_LTR.fastq", 
-			R2LTR="03-LTR/{NAME}_R2_TAG{TAG}_LTR.fastq", 
-			R1noLTR="03-LTR/{NAME}_R1_TAG{TAG}_noLTR.fastq",
-			R2noLTR="03-LTR/{NAME}_R2_TAG{TAG}_noLTR.fastq",
+			R2LTR=temp("03-LTR/{NAME}_R2_TAG{TAG}_LTR.fastq"), 
+			R1noLTR=temp("03-LTR/{NAME}_R1_TAG{TAG}_noLTR.fastq"),
+			R2noLTR=temp("03-LTR/{NAME}_R2_TAG{TAG}_noLTR.fastq"),
 	log:"log/Trim-LTR_in_R1.log"
 	threads: 1
 	message: "Look for the LTR in R1"
@@ -152,8 +151,8 @@ rule Find_Elong:
 	input: R1=rules.Find_LTR.output.R1LTR, R2=rules.Find_LTR.output.R2LTR
 	output: R1elong="04-ELONG/{NAME}_R1_TAG{TAG}_Elong.fastq", 
 			R2elong="04-ELONG/{NAME}_R2_TAG{TAG}_Elong.fastq",
-			R1noelong="04-ELONG/{NAME}_R1_TAG{TAG}_noElong.fastq",
-			R2noelong="04-ELONG/{NAME}_R2_TAG{TAG}_noElong.fastq"
+			R1noelong=temp("04-ELONG/{NAME}_R1_TAG{TAG}_noElong.fastq"),
+			R2noelong=temp("04-ELONG/{NAME}_R2_TAG{TAG}_noElong.fastq")
 	log:"log/Trim-ELONG_in_R1.log"
 	threads: 1
 	message: "Look for the Elong in R1"
@@ -164,9 +163,9 @@ rule Find_Elong:
 rule Start_with_GCA:
 	input: R1=rules.Find_Elong.output.R1elong, R2=rules.Find_Elong.output.R2elong
 	output: GCAR1="05-GCA/{NAME}_R1_TAG{TAG}_GCA.fastq",
-			noGCAR1="05-GCA/{NAME}_R1_TAG{TAG}_noGCA.fastq",
+			noGCAR1=temp("05-GCA/{NAME}_R1_TAG{TAG}_noGCA.fastq"),
 			GCAR2="05-GCA/{NAME}_R2_TAG{TAG}_GCA.fastq", 
-			noGCAR2="05-GCA/{NAME}_R2_TAG{TAG}_noGCA.fastq"
+			noGCAR2=temp("05-GCA/{NAME}_R2_TAG{TAG}_noGCA.fastq")
 	message: "Filtering R1 reads that start with GCA"
 	log: "log/Trim-GCA_starting_R1.log"
 	threads: 1
@@ -177,7 +176,7 @@ rule Start_with_GCA:
 rule Find_Linker_R1:
 	input: R1=rules.Start_with_GCA.output.GCAR1, R2=rules.Start_with_GCA.output.GCAR2
 	output: R1Linker="06-LinkerR1/{NAME}_R1_TAG{TAG}_LinkerR1.fastq",
-			R2Linker="06-LinkerR1/{NAME}_R2_TAG{TAG}_LinkerR1.fastq", 
+			R2Linker=temp("06-LinkerR1/{NAME}_R2_TAG{TAG}_LinkerR1.fastq"), 
 			R1noLinker="06-LinkerR1/{NAME}_R1_TAG{TAG}_noLinkerR1.fastq",
 			R2noLinker="06-LinkerR1/{NAME}_R2_TAG{TAG}_noLinkerR1.fastq"
 	log:"log/Trim-Linker_in_R1.log"
@@ -191,8 +190,8 @@ rule Find_Linker_R2:
 	input: R1=rules.Find_Linker_R1.output.R1noLinker, R2=rules.Find_Linker_R1.output.R2noLinker
 	output: R1Linker="06-LinkerR2/{NAME}_R1_TAG{TAG}_LinkerR2.fastq", 
 			R2Linker="06-LinkerR2/{NAME}_R2_TAG{TAG}_LinkerR2.fastq",
-			R1noLinker="06-LinkerR2/{NAME}_R1_TAG{TAG}_noLinkerR2.fastq", 
-			R2noLinker="06-LinkerR2/{NAME}_R2_TAG{TAG}_noLinkerR2.fastq"
+			R1noLinker=temp("06-LinkerR2/{NAME}_R1_TAG{TAG}_noLinkerR2.fastq"), 
+			R2noLinker=temp("06-LinkerR2/{NAME}_R2_TAG{TAG}_noLinkerR2.fastq")
 	log:"log/Trim-Linker_in_R2.log"
 	threads: 1
 	message: "Look for the Linker in R2"
@@ -207,7 +206,7 @@ rule Find_Linker_R2:
 	
 rule Collapse_identical_reads:
 	input: rules.Find_Linker_R1.output.R1Linker
-	output: file = "07-collapsed/{NAME}_R1_TAG{TAG}_LinkerR1_trimmed.fastq"
+	output: file = temp("07-collapsed/{NAME}_R1_TAG{TAG}_LinkerR1_trimmed.fastq")
 	message: "Collapsing R1 with linker identical reads before mapping"
 	log:"log/collapse_R1wLinker.log"
 	threads: 1
@@ -219,7 +218,7 @@ rule Collapse_identical_reads:
 rule FilterSize_R1collapsed:
 	input: rules.Collapse_identical_reads.output.file
 	output: filtered="07-collapsed/{NAME}_R1_TAG{TAG}_LinkerR1_trimmed_filtered.fastq",
-			tooshort="07-collapsed/{NAME}_R1_TAG{TAG}_LinkerR1_trimmed_2short.fastq"
+			tooshort= temp("07-collapsed/{NAME}_R1_TAG{TAG}_LinkerR1_trimmed_2short.fastq")
 	message:"Filtering reads shorter than 20bp"
 	log:"log/collapsed_R1_filtersize.log"
 	threads:1
@@ -235,10 +234,10 @@ rule FilterSize_R1collapsed:
 		
 rule Map_R1_with_Linker :
 	input: rules.FilterSize_R1collapsed.output.filtered
-	output: mappedsam="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.sam",
-			mapped="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.fastq", 
-			unmapped="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq", 
-			exact="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam",
+	output: mappedsam= temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.sam"),
+			mapped=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.fastq"), 
+			unmapped= temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq"), 
+			exact=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam"),
 			multihits="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_nomulti.sam"
 	log: met="log/mappingR1wLinker.log",summary="log/mappingR1wLinker_numbers.log"
 	threads: 8
@@ -269,12 +268,12 @@ rule Filter_Map_R1:
 	output: bam=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped.bam"),
 			sortbam="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
 			idx="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
-			bed="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bed",
-			ISsortednum="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
-			IS=("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS.bed"),
+			bed=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bed"),
+			ISsortednum=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed"),
+			IS=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS.bed"),
 			ISsorted="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
 			IScollapsedSize="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
-			IScluster="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
+			IScluster=temp("08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_cluster.bed"),
 			ISclustersorted="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
 			IScollapsed="08-mappingR1wLinker/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
 	params: qual="0", collapsing_window="-1"
@@ -305,8 +304,8 @@ rule Filter_Map_R1:
 # look for the reverse-complement Elongation in R2 3'end.
 rule Find_RC_LTR_R2:
 	input: R1=rules.Find_Linker_R2.output.R1Linker,R2=rules.Find_Linker_R2.output.R2Linker
-	output: trimmedLTRRCR1="06-RCLTRR2/{NAME}_R1_TAG{TAG}_trimmedElongRCR2.fastq", 
-			trimmedLTRRCR2="06-RCLTRR2/{NAME}_R2_TAG{TAG}_trimmedElongRCR2.fastq"
+	output: trimmedLTRRCR1=temp("06-RCLTRR2/{NAME}_R1_TAG{TAG}_trimmedElongRCR2.fastq"), 
+			trimmedLTRRCR2=temp("06-RCLTRR2/{NAME}_R2_TAG{TAG}_trimmedElongRCR2.fastq")
 	log: "log/Trim-RC-LTR_in_R2.log"
 	threads: 1
 	message: "Trimming R2 that have LTR"
@@ -318,9 +317,9 @@ rule FilterSize_R1R2:
 	input: R1=rules.Find_RC_LTR_R2.output.trimmedLTRRCR1, 
 			R2=rules.Find_RC_LTR_R2.output.trimmedLTRRCR2
 	output: R1filtered="06-RCLTRR2/{NAME}_R1_TAG{TAG}_filtered.fastq",
-			R1tooshort="06-RCLTRR2/{NAME}_R1_TAG{TAG}_2short.fastq",
+			R1tooshort= temp("06-RCLTRR2/{NAME}_R1_TAG{TAG}_2short.fastq"),
 			R2filtered="06-RCLTRR2/{NAME}_R2_TAG{TAG}_filtered.fastq",
-			R2tooshort="06-RCLTRR2/{NAME}_R2_TAG{TAG}_2short.fastq"
+			R2tooshort= temp("06-RCLTRR2/{NAME}_R2_TAG{TAG}_2short.fastq")
 	message:"Filtering any R1R2 read pairs if any is shorter than 20bp"
 	log:"log/R1R2_filtersize.log"
 	threads:1
@@ -372,7 +371,7 @@ rule Map_R1_R2_pairs:
 rule Filter_Map_R1R2_unique:
 	input: rules.Map_R1_R2_pairs.output.mapped
 	output: flag=temp("08-mappingR1R2/{NAME}_TAG{TAG}_flag.sam"),
-			flagmulti="08-mappingR1R2/{NAME}_TAG{TAG}_flagmulti.sam",
+			flagmulti=temp("08-mappingR1R2/{NAME}_TAG{TAG}_flagmulti.sam"),
 			collapsed=temp("08-mappingR1R2/{NAME}_TAG{TAG}_collapsed.sam"),
 			confident="08-mappingR1R2/{NAME}_TAG{TAG}_qual_gt20.sam",
 			R1_badqualfq= "08-mappingR1R2/{NAME}_R1_TAG{TAG}_qual_lt20.fastq"
@@ -401,11 +400,11 @@ rule Filter_Map_R1R2_unique:
 rule Filter_Map_R1R2:
 	input: sam = rules.Filter_Map_R1R2_unique.output.confident
 	output: bam = "08-mappingR1R2/{NAME}_TAG{TAG}.bam",
-			bed = "08-mappingR1R2/{NAME}_TAG{TAG}.bed",
-			IS= "08-mappingR1R2/{NAME}_TAG{TAG}_IS.bed",
+			bed = temp("08-mappingR1R2/{NAME}_TAG{TAG}.bed"),
+			IS= temp("08-mappingR1R2/{NAME}_TAG{TAG}_IS.bed"),
 			idx= "08-mappingR1R2/{NAME}_TAG{TAG}.bai",
 			ISsorted="08-mappingR1R2/{NAME}_TAG{TAG}_sorted.bed",
-			IScluster="08-mappingR1R2/{NAME}_TAG{TAG}_clusters.bed",
+			IScluster=temp("08-mappingR1R2/{NAME}_TAG{TAG}_clusters.bed"),
 			IScollapsedSize="08-mappingR1R2/{NAME}_TAG{TAG}_IS_collapsedBySizeCluster.bed",
 			ISclustersorted="08-mappingR1R2/{NAME}_TAG{TAG}_IS_cluster_sorted.bed",
 			IScollapsed="08-mappingR1R2/{NAME}_TAG{TAG}_IS_Collapsed.bed"
@@ -452,9 +451,9 @@ rule Merge_R1alones:
 	
 rule Cut_TTAA_R1_noLinker:
 	input: rules.Merge_R1alones.output
-	output: TTAA="07-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq", 
+	output: TTAA=temp("07-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut.fastq"), 
 			TTAA_cut="07-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp.fastq",
-			tooshort="07-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp_2short.fastq"
+			tooshort= temp("07-TTAA_cutR1alone/{NAME}_R1_TAG{TAG}_TTAA-cut20bp_2short.fastq")
 	message: "Cutting TTAA sequences that are still present and filter reads shorter than 20bp"
 	threads: 1
 	log: "log/Cut_TTAA_Merge_R1.log"
@@ -479,10 +478,10 @@ rule Collapse_identical_R1_noLinkerReads:
 			
 rule Map_R1_noLinker:
 		input: R1=rules.Collapse_identical_R1_noLinkerReads.output.file
-		output: mappedsam="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.sam",
+		output: mappedsam=temp("08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.sam"),
 				mapped="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.fastq",
-				unmapped="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq",
-				exact="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam",
+				unmapped=temp("08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_unmapped.fastq"),
+				exact= temp("08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_exact.sam"),
 				multihits="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_nomulti.sam"
 		message:"Mapping R1 reads without Linker in R1 nor R2 and R1 that were unmapped in previous steps  and filter out those with mismatches in the 3 first positions after the LTR and multihits"
 		threads: 8
@@ -497,15 +496,15 @@ rule Map_R1_noLinker:
 			
 rule Filter_Map_R1_noLinker:
 	input: rules.Map_R1_noLinker.output.multihits
-	output: bam="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.bam",
+	output: bam=temp("08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped.bam"),
 			sortbam="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bam",
 			idx="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bai",
-			bed="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bed",
-			IS="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_IS.bed",
+			bed=temp("08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_mapped_sorted.bed"),
+			IS=temp("08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_IS.bed"),
 			ISsorted="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_IS_sorted.bed",
 			ISsortednum="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_IS_sortedNum.bed",
 			IScollapsedSize="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_IS_collapsedBySizeCluster.bed",
-			IScluster="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_IS_cluster.bed",
+			IScluster=temp("08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_IS_cluster.bed"),
 			ISclustersorted="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_IS_cluster_sorted.bed",
 			IScollapsed="08-mapping_MergedR1NoLinker/{NAME}_R1_TAG{TAG}_IS_Collapsed.bed"
 	params: qual="10"
@@ -534,16 +533,16 @@ rule QualIS:
 	input: R1full=rules.Filter_Map_R1.output.IScollapsed, 
 		R1alone=rules.Filter_Map_R1_noLinker.output.IScollapsed, 
 		R1R2=rules.Filter_Map_R1R2.output.IScollapsed
-	output: merged=("09-qualitativeIS/{NAME}_TAG{TAG}_qualIS.bed"), 
-			merged_corrected="09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed",
-			merged_sorted = "09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted.bed",
+	output: merged=temp("09-qualitativeIS/{NAME}_TAG{TAG}_qualIS.bed"), 
+			merged_corrected=temp("09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged.bed"),
+			merged_sorted = temp("09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted.bed"),
 			merged_sorted_collapsed= "09-qualitativeIS/{NAME}_TAG{TAG}_qualIS_merged_sorted_collapsed.bed"
 	message: "Merging and collapsing IS from each step"
 	threads: 1
 	log: "log/qualitativeIS.log"
 	shell: """
 			cat  {input.R1full} {input.R1alone} {input.R1R2} > {output.merged};
-			awk '{{print "chr"$0}}' {output.merged} > {output.merged_corrected};
+			awk '{{print $0}}' {output.merged} > {output.merged_corrected};
 			sort -k1,1 -k2,2n {output.merged_corrected} > {output.merged_sorted};
 			bedtools merge -s -d -1 -c 1,2,3,4,5,6,7 -o distinct,mode,mode,collapse,median,distinct,sum -i {output.merged_sorted} | cut -f 5- | bedtools sort -i - > {output.merged_sorted_collapsed};
 			"""
@@ -564,17 +563,15 @@ rule QualIS:
 rule QuantIS:
 	input:R1full=rules.Filter_Map_R1.output.ISclustersorted,
 		R1R2=rules.Filter_Map_R1R2.output.IScollapsedSize
-	output: merged="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_merged.bed", 
-			merged_corrected="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_merged_corrected.bed",
-			IScluster="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_cluster.bed",
+	output: merged=temp("09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_merged.bed"), 
+			IScluster=temp("09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_cluster.bed"),
 			ISclustersorted="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_cluster_sorted.bed",
 			IScollapsedSize="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS_collapsedSize.bed",
 			IScollapsed="09-quantitativeIS/{NAME}_TAG{TAG}_quantIS.bed"
 	threads: 1
 	shell: """
 			cat {input.R1full} {input.R1R2} > {output.merged};
-			awk 'OFS="\\t" {{print "chr"$0}}' {output.merged} > {output.merged_corrected};
-			awk 'OFS="\\t" {{print $1,$2,$3,$4,$5,$6,$7,$8}}' {output.merged_corrected} | bedtools cluster -s -d -1 -i - > {output.IScluster};
+			awk 'OFS="\\t" {{print $1,$2,$3,$4,$5,$6,$7,$8}}' {output.merged} | bedtools cluster -s -d -1 -i - > {output.IScluster};
 			sort -k 9,9n -k 7,7n {output.IScluster} > {output.ISclustersorted};
 			bedtools groupby -i {output.ISclustersorted}  -g 9,7 -c 1,2,3,4,5,6,7,8,9 -o distinct,mode,mode,collapse,median,distinct,distinct,sum,distinct  | cut -f 3- > {output.IScollapsedSize};
 			bedtools groupby -i {output.IScollapsedSize} -g 9 -c 1,2,3,4,5,6,8,7 -o distinct,mode,mode,collapse,median,distinct,sum,count_distinct | cut -f 2-  > {output.IScollapsed}
@@ -593,12 +590,12 @@ rule QuantIS:
 	
 rule GetAnnotations_UCSC:
 	input: rules.Prepare_folders.output.annot
-	output: folder = ANNOTATION+"UCSC/",ChrSize= ANNOTATION+"UCSC/hg19.chrom.sizes",genes=ANNOTATION+"UCSC/knownGene.txt"
-	log: "log/UCSC_remote_wget.log"
+	output: folder = ANNOTATION+"UCSC/",genes=ANNOTATION+"UCSC/knownGene.txt"
+	log: "log/UCSC_remote_wget"+GENOME+".log"
 	threads: 1
 	message: "Downloading annotation from UCSC"
 	shell : """
-			xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/hg19_annotationUCSC_urls.txt 2> {log};
+			xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/{GENOME}_annotationUCSC_urls.txt 2> {log};
 			gunzip {output.folder}/*.gz
 			"""
 			
@@ -613,35 +610,50 @@ rule GetAnnotations_HGNC:
 			
 rule GetAnnotations_Ensembl:	
 	input: rules.Prepare_folders.output.annot
-	output: folder =ANNOTATION+"Ensembl/", ChrSize= ANNOTATION+"Ensembl/hg19.chrom.sizes", genes=ANNOTATION+"Ensembl/ensGene.txt"
+	output: folder =ANNOTATION+"Ensembl/", genes=ANNOTATION+"Ensembl/ensGene.txt"
 	threads: 1
-	log: "log/Ensembl_remote_wget.log"
+	log: "log/Ensembl_remote_wget"+GENOME+".log"
 	message: "Downloading annotation from Ensembl"
 	shell:"""
-			xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/hg19_annotationEnsembl_urls.txt 2> {log};
+			xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/{GENOME}_annotationEnsembl_urls.txt 2> {log};
 			gunzip {output.folder}/*.gz
 			"""
 
 rule GetAnnotations_RefSeq:
 	input:  rules.Prepare_folders.output.annot
-	output: folder = ANNOTATION+"RefSeq/", genes = ANNOTATION+"RefSeq/refFlat.txt", ChrSize= ANNOTATION+"RefSeq/hg19.chrom.sizes"
+	output: folder = ANNOTATION+"RefSeq/", genes = ANNOTATION+"RefSeq/refFlat.txt"
 	threads: 1
-	log: "log/RefSeq_remote_wget.log"
+	log: "log/RefSeq_remote_wget_"+GENOME+".log"
 	message: "Downloading annotation from RefSeq"
 	shell: """
-			 xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/hg19_annotationRefSeq_urls.txt 2> {log};
-			 gunzip {output.folder}/*.gz
+			 xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/{GENOME}_annotationRefSeq_urls.txt 2> {log};
+			 gunzip {output.folder}*.gz
 			"""
+
+rule GetAnnotation_Other:
+	input:rules.Prepare_folders.output.annot
+	output:ANNOTATION+"/DNAseI"
+	shell: """
+			mkdir {ANNOTATION}DNAseI/
+			wget -P {ANNOTATION}DNAseI/ --no-directories http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/eioJcviNASPos.txt.gz;
+			gunzip {ANNOTATION}DNAseI/eioJcviNASPos.txt.gz;
+			awk 'OFS="\\t" {{print $2,$3,$4}}' {ANNOTATION}DNAseI/eioJcviNASPos.txt > {ANNOTATION}DNAseI/DNAseI_CD34.bed && rm {ANNOTATION}DNAseI/eioJcviNASPos.txt;
 			
+			mkdir {ANNOTATION}CpG_Islands/
+			wget -P {ANNOTATION}CpG_Islands/ --no-directories http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/cpgIslandExtUnmasked.txt.gz;
+			gunzip {ANNOTATION}CpG_Islands/cpgIslandExtUnmasked.txt.gz;
+			awk 'OFS="\\t" {{print $2,$3,$4,$5$6}}' {ANNOTATION}CpG_Islands/cpgIslandExtUnmasked.txt > {ANNOTATION}CpG_Islands/UCSC_cpgIslandExtUnmaskedGC.txt && rm {ANNOTATION}CpG_Islands/cpgIslandExtUnmasked.txt;
+			
+			"""
 			
 rule GetAnnotations_GenCode:
 	input:  rules.Prepare_folders.output.annot
-	output: folder = ANNOTATION+"GencodeV19/"
+	output: folder = ANNOTATION+"Gencode/"
 	threads: 1
-	log: "log/Gencode_remote_wget.log"
-	message: "Downloading annotation from GencodeV19"
+	log: "log/Gencode_remote_wget"+GENOME+".log"
+	message: "Downloading annotation from Gencode"
 	shell: """
-			xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/hg19_annotationGencodeV19_urls.txt 2> {log};
+			xargs -i wget -nc -P {output.folder} '{{}}'  < {SCRIPTS}/{GENOME}_annotationGencode*_urls.txt 2> {log};
 			gunzip {output.folder}/*.gz
 			"""	
 			
@@ -654,8 +666,8 @@ rule GetAnnotations_GenCode:
 						
 rule FormatAnnotationRefSeq:
 	input: rules.GetAnnotations_RefSeq.output.folder,
-			refFlat=rules.GetAnnotations_RefSeq.output.genes, 
-			gensize= rules.GetAnnotations_RefSeq.output.ChrSize
+			refFlat=rules.GetAnnotations_RefSeq.output.genes
+			
 	output: reflatBed=ANNOTATION+"RefSeq/refFlat.bed",
 			reflatTSS=ANNOTATION+"RefSeq/refFlatTSS.bed",
 			reflatTSSSorted=ANNOTATION+"RefSeq/refFlatTSSsorted.bed",
@@ -670,16 +682,15 @@ rule FormatAnnotationRefSeq:
 			awk 'OFS="\\t" {{print $3,$5,$6,$2,0,$4}}' {input.refFlat} | bedtools sort -i - > {output.reflatBed};
 			awk 'OFS="\\t" {{if($6 == "+") {{print $1,$2,$2+1,$4,$5,$6}} else {{print $1,$3-1,$3,$4,$5,$6}}}}' {output.reflatBed} > {output.reflatTSS};
 			bedtools sort -i {output.reflatTSS} > {output.reflatTSSSorted};
-			bedtools flank -s -l 40 -r 0 -g {input.gensize} -i {output.reflatTSSSorted} > {output.reflatCore};
-			bedtools flank -s -l 160 -r 0 -g {input.gensize} -i {output.reflatCore} > {output.reflatProx};
-			bedtools flank -s -l 800 -r 0 -g {input.gensize} -i {output.reflatProx} > {output.reflatDist};
+			bedtools flank -s -l 40 -r 0 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -i {output.reflatTSSSorted} > {output.reflatCore};
+			bedtools flank -s -l 160 -r 0 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -i {output.reflatCore} > {output.reflatProx};
+			bedtools flank -s -l 800 -r 0 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -i {output.reflatProx} > {output.reflatDist};
 			awk 'OFS="\\t" {{split($10,a,",");split($11,b,","); for (i = 1; i <= $9; ++i) {{if($4=="-") {{k=$9-i+1}} else {{k=i}}; print $3,a[i],b[i],$2"_exon_"k,$1,$4}}}}' {input.refFlat} | bedtools sort -i - > {output.reflatExons}
 			"""
 	
 rule FormatAnnotationUCSC:
 	input: rules.GetAnnotations_UCSC.output.folder,
-			known=rules.GetAnnotations_UCSC.output.genes,
-			gensize= rules.GetAnnotations_UCSC.output.ChrSize
+			known=rules.GetAnnotations_UCSC.output.genes
 	output: UCSCBed=ANNOTATION+"UCSC/knownGenes.bed",
 			UCSCTSS=ANNOTATION+"UCSC/knownGeneTSS.bed",
 			UCSCTSSSorted=ANNOTATION+"UCSC/UCSCTSSsorted.bed",
@@ -693,9 +704,9 @@ rule FormatAnnotationUCSC:
 			awk 'OFS="\\t" {{print $2,$4,$5,$1,0,$3}}' {input.known} | bedtools sort -i - > {output.UCSCBed};
 			awk 'OFS="\\t" {{if($6 == "+") {{print $1,$2,$2+1,$4,$5,$6}} else {{print $1,$3-1,$3,$4,$5,$6}}}}' {output.UCSCBed} > {output.UCSCTSS};
 			bedtools sort -i {output.UCSCTSS} > {output.UCSCTSSSorted};
-			bedtools flank -s -l 40 -r 0 -g {input.gensize} -i {output.UCSCTSSSorted} > {output.UCSCCore};
-			bedtools flank -s -l 160 -r 0 -g {input.gensize} -i {output.UCSCCore} > {output.UCSCProx};
-			bedtools flank -s -l 800 -r 0 -g {input.gensize} -i {output.UCSCProx} > {output.UCSCDist};
+			bedtools flank -s -l 40 -r 0 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -i {output.UCSCTSSSorted} > {output.UCSCCore};
+			bedtools flank -s -l 160 -r 0 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -i {output.UCSCCore} > {output.UCSCProx};
+			bedtools flank -s -l 800 -r 0 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -i {output.UCSCProx} > {output.UCSCDist};
 			awk 'OFS="\\t" {{split($9,a,",");split($10,b,","); for (i = 1; i <= $8; ++i) {{if($3=="-") {{k=$8-i+1}} else {{k=i}}; print $2,a[i],b[i],$1"_exon_"k,$1,$3}}}}' {input.known} | bedtools sort -i - > {output.UCSCExons}
 			"""
 
@@ -710,8 +721,7 @@ rule FormatAnnotationHGNC:
 	
 rule FormatAnnotationEnsembl:
 	input: rules.GetAnnotations_Ensembl.output.folder,
-			EnsGenes=rules.GetAnnotations_Ensembl.output.genes,
-			gensize= rules.GetAnnotations_Ensembl.output.ChrSize
+			EnsGenes=rules.GetAnnotations_Ensembl.output.genes
 	output: EnsBed=ANNOTATION+"Ensembl/EnsGenes.bed",
 			EnsTSS=ANNOTATION+"Ensembl/EnsGeneTSS.bed",
 			EnsTSSSorted=ANNOTATION+"Ensembl/EnsTSSsorted.bed",
@@ -725,9 +735,9 @@ rule FormatAnnotationEnsembl:
 			awk 'OFS="\\t" {{print $3,$5,$6,$2,$13,$4}}' {input.EnsGenes} | bedtools sort -i - > {output.EnsBed};
 			awk 'OFS="\\t" {{if($6 == "+") {{print $1,$2,$2+1,$4,$5,$6}} else {{print $1,$3-1,$3,$4,$5,$6}}}}' {output.EnsBed} > {output.EnsTSS};
 			bedtools sort -i {output.EnsTSS} > {output.EnsTSSSorted};
-			bedtools flank -s -l 40 -r 0 -g {input.gensize} -i {output.EnsTSSSorted} > {output.EnsCore};
-			bedtools flank -s -l 160 -r 0 -g {input.gensize} -i {output.EnsCore} > {output.EnsProx};
-			bedtools flank -s -l 800 -r 0 -g {input.gensize} -i {output.EnsProx} > {output.EnsDist};
+			bedtools flank -s -l 40 -r 0 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -i {output.EnsTSSSorted} > {output.EnsCore};
+			bedtools flank -s -l 160 -r 0 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -i {output.EnsCore} > {output.EnsProx};
+			bedtools flank -s -l 800 -r 0 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -i {output.EnsProx} > {output.EnsDist};
 			awk 'OFS="\\t" {{split($10,a,",");split($11,b,","); for (i = 1; i <= $9; ++i) {{if($4=="-") {{k=$9-i+1}} else {{k=i}}; print $3,a[i],b[i],$2"_exon_"k,$13,$4}}}}' {input.EnsGenes} | bedtools sort -i - > {output.EnsExons}
 			
 			"""	
@@ -849,10 +859,10 @@ rule QC_stat:
 
 rule motif:
 	input: R1R2 = rules.Filter_Map_R1R2.output.bed, R1 = rules.Filter_Map_R1.output.bed
-	output: R1R2fragment = ("09-qualitativeIS/{NAME}_TAG{TAG}_R1R2_full_aligment.bed"),
-			mergedfragm=("09-qualitativeIS/{NAME}_TAG{TAG}_R1R1R2_merged.bed"),
-			ISpos=("09-qualitativeIS/{NAME}_TAG{TAG}_IS_position.bed"),
-			Ligpos=("09-qualitativeIS/{NAME}_TAG{TAG}_ligation_position.bed"),
+	output: R1R2fragment = temp("09-qualitativeIS/{NAME}_TAG{TAG}_R1R2_full_aligment.bed"),
+			mergedfragm=temp("09-qualitativeIS/{NAME}_TAG{TAG}_R1R1R2_merged.bed"),
+			ISpos=temp("09-qualitativeIS/{NAME}_TAG{TAG}_IS_position.bed"),
+			Ligpos=temp("09-qualitativeIS/{NAME}_TAG{TAG}_ligation_position.bed"),
 			ISposslop=temp("09-qualitativeIS/{NAME}_TAG{TAG}_IS_position_slop.bed"),
 			Ligposslop=temp("09-qualitativeIS/{NAME}_TAG{TAG}_ligation_position_slop.bed"),
 			ISposfa=temp("09-qualitativeIS/{NAME}_TAG{TAG}_IS_position.fa"),
@@ -865,21 +875,23 @@ rule motif:
 	shell: """
 			awk 'OFS="\\t" {{if($9=="+") {{print $1,$2,$6,$7,$8,$9}} else {{print $1,$5,$3,$7,$8,$9}}}}' {input.R1R2} | sort -k 1,1 -k 2,2n > {output.R1R2fragment};
 			cat  {input.R1} {output.R1R2fragment} | sort -k 1,1 -k 2,2n > {output.mergedfragm};
-			awk 'OFS="\\t" {{if($6=="-") {{print "chr"$1,$3-1,$3,$4,$5,$6}} else {{print "chr"$1,$2,$2+1,$4,$5,$6}}}}' {output.mergedfragm} | bedtools sort -i - | bedtools merge -i - -s -d -1 > {output.ISpos};
-			awk 'OFS="\\t" {{if($6=="-") {{print "chr"$1,$2,$2+1,$4,$5,$6}} else {{print "chr"$1,$3-1,$3,$4,$5,$6}}}}' {output.mergedfragm} | bedtools sort -i - | bedtools merge -i - -s -d -1 > {output.Ligpos};
+			awk 'OFS="\\t" {{if($6=="-") {{print $1,$3-1,$3,$4,$5,$6}} else {{print $1,$2,$2+1,$4,$5,$6}}}}' {output.mergedfragm} | bedtools sort -i - | bedtools merge -i - -s -d -1 > {output.ISpos};
+			awk 'OFS="\\t" {{if($6=="-") {{print $1,$2,$2+1,$4,$5,$6}} else {{print $1,$3-1,$3,$4,$5,$6}}}}' {output.mergedfragm} | bedtools sort -i - | bedtools merge -i - -s -d -1 > {output.Ligpos};
 			
-			bedtools slop -i {output.ISpos} -b {params.window} -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.all.chrom.sizes > {output.ISposslop};
-			bedtools slop -i {output.Ligpos} -b {params.window} -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.all.chrom.sizes > {output.Ligposslop};
+			bedtools slop -i {output.ISpos} -b {params.window} -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes > {output.ISposslop};
+			bedtools slop -i {output.Ligpos} -b {params.window} -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes > {output.Ligposslop};
 
-			bedtools getfasta -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.ISposslop} -fo {output.ISposfa};
-			bedtools getfasta -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.Ligposslop} -fo {output.Ligposfa};
+			bedtools getfasta -fi {BASE}/{GENOME}/genome/fasta/{GENOME}_UCSC.fa -bed {output.ISposslop} -fo {output.ISposfa};
+			bedtools getfasta -fi {BASE}/{GENOME}/genome/fasta/{GENOME}_UCSC.fa -bed {output.Ligposslop} -fo {output.Ligposfa};
 
 			weblogo -f {output.ISposfa} -s large -o {output.ISmotif} -F png --fontsize 14 -U probability -c classic;
 			weblogo -f {output.Ligposfa} -s large -o {output.Ligmotif} -F png --fontsize 14 -U probability -c classic;
 			"""
 
 rule Features_association:
-	input: rules.QualIS.output.merged_sorted_collapsed
+	input: IS=rules.QualIS.output.merged_sorted_collapsed,
+			anno=rules.GetAnnotation_Other.output,
+			genes=rules.FormatAnnotationRefSeq.output
 	output: random=("10-randomIS/{NAME}_TAG{TAG}_randomIS.bed"),
 			randomRenamed="10-randomIS/{NAME}_TAG{TAG}_randomIS_renamed.bed",
 			MergedRndQualiIS= "10-randomIS/{NAME}_TAG{TAG}_MergedQualIS_Rnd.bed",
@@ -917,15 +929,15 @@ rule Features_association:
 	params: 
 	threads:1
 	shell: """
-			bedtools random -n $(wc -l {input} | awk '{{print $1}}') -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes -l 1 | sort -k 1,1 -k 2,2n -k 3,3n -u  > {output.random};
+			bedtools random -n $(wc -l {input.IS} | awk '{{print $1}}') -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes -l 1 | sort -k 1,1 -k 2,2n -k 3,3n -u  > {output.random};
 			awk 'OFS="\\t" {{print $1,$2,$3,"random"NR,$5,$6}}' {output.random} > {output.randomRenamed};
-			cat {output.randomRenamed} {input} | sort -k1,1 -k2,2n -k3,3n | cut -f 1-6 | awk 'OFS= "\\t" {{print $1,$2,$3,$4,0,$6}}' > {output.MergedRndQualiIS};
+			cat {output.randomRenamed} {input.IS} | sort -k1,1 -k2,2n -k3,3n | cut -f 1-6 | awk 'OFS= "\\t" {{print $1,$2,$3,$4,0,$6}}' > {output.MergedRndQualiIS};
 			
-			bedtools slop -i {output.MergedRndQualiIS} -b 50 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop01};
-			bedtools slop -i {output.MergedRndQualiIS} -b 500 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop1};
-			bedtools slop -i {output.MergedRndQualiIS} -b 5000 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop10};
-			bedtools slop -i {output.MergedRndQualiIS} -b 50000 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop100};
-			bedtools slop -i {output.MergedRndQualiIS} -b 500000 -g {GENOME_DATASETS}/chromsizes/UCSC_hg19.chrom.sizes > {output.slop1M};
+			bedtools slop -i {output.MergedRndQualiIS} -b 50 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes > {output.slop01};
+			bedtools slop -i {output.MergedRndQualiIS} -b 500 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes > {output.slop1};
+			bedtools slop -i {output.MergedRndQualiIS} -b 5000 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes > {output.slop10};
+			bedtools slop -i {output.MergedRndQualiIS} -b 50000 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes > {output.slop100};
+			bedtools slop -i {output.MergedRndQualiIS} -b 500000 -g {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes > {output.slop1M};
 			
 			bedtools intersect -c -a {output.slop01} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity01};
 			bedtools intersect -c -a {output.slop1} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity1};
@@ -933,23 +945,23 @@ rule Features_association:
 			bedtools intersect -c -a {output.slop100} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity100};
 			bedtools intersect -c -a {output.slop1M} -b {ANNOTATION}/RefSeq/refFlat.bed > {output.Genedensity1M};
 			
-			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop01} -C > {output.GCcontent01};
-			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop1} -C > {output.GCcontent1};
-			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop10} -C > {output.GCcontent10};
-			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop100} -C > {output.GCcontent100};
-			bedtools nuc -fi {GENOME_DATASETS}/fasta/UCSC_hg19.fa -bed {output.slop1M} -C > {output.GCcontent1M};
+			bedtools nuc -fi {BASE}/{GENOME}/genome/fasta/{GENOME}_UCSC.fa -bed {output.slop01} -C > {output.GCcontent01};
+			bedtools nuc -fi {BASE}/{GENOME}/genome/fasta/{GENOME}_UCSC.fa -bed {output.slop1} -C > {output.GCcontent1};
+			bedtools nuc -fi {BASE}/{GENOME}/genome/fasta/{GENOME}_UCSC.fa -bed {output.slop10} -C > {output.GCcontent10};
+			bedtools nuc -fi {BASE}/{GENOME}/genome/fasta/{GENOME}_UCSC.fa -bed {output.slop100} -C > {output.GCcontent100};
+			bedtools nuc -fi {BASE}/{GENOME}/genome/fasta/{GENOME}_UCSC.fa -bed {output.slop1M} -C > {output.GCcontent1M};
 			
-			bedtools intersect -c -a {output.slop01} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse01};
-			bedtools intersect -c -a {output.slop1} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse1};
-			bedtools intersect -c -a {output.slop10} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse10};
-			bedtools intersect -c -a {output.slop100} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse100};
-			bedtools intersect -c -a {output.slop1M} -b {GENOME_DATASETS}/DNAseHS/UCSC_CD34_DNAseI.bed > {output.DNAse1M};
+			bedtools intersect -c -a {output.slop01} -b {ANNOTATION}/DNAseI/DNAseI_CD34.bed > {output.DNAse01};
+			bedtools intersect -c -a {output.slop1} -b {ANNOTATION}/DNAseI/DNAseI_CD34.bed > {output.DNAse1};
+			bedtools intersect -c -a {output.slop10} -b {ANNOTATION}/DNAseI/DNAseI_CD34.bed > {output.DNAse10};
+			bedtools intersect -c -a {output.slop100} -b {ANNOTATION}/DNAseI/DNAseI_CD34.bed > {output.DNAse100};
+			bedtools intersect -c -a {output.slop1M} -b {ANNOTATION}/DNAseI/DNAseI_CD34.bed > {output.DNAse1M};
 			
-			bedtools intersect -c -a {output.slop01} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG01};
-			bedtools intersect -c -a {output.slop1} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG1};
-			bedtools intersect -c -a {output.slop10} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG10};
-			bedtools intersect -c -a {output.slop100} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG100};
-			bedtools intersect -c -a {output.slop1M} -b {GENOME_DATASETS}/cpgislands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG1M};					
+			bedtools intersect -c -a {output.slop01} -b {ANNOTATION}/CpG_Islands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG01};
+			bedtools intersect -c -a {output.slop1} -b {ANNOTATION}/CpG_Islands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG1};
+			bedtools intersect -c -a {output.slop10} -b {ANNOTATION}/CpG_Islands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG10};
+			bedtools intersect -c -a {output.slop100} -b {ANNOTATION}/CpG_Islands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG100};
+			bedtools intersect -c -a {output.slop1M} -b {ANNOTATION}/CpG_Islands/UCSC_cpgIslandExtUnmaskedGC.txt > {output.CpG1M};					
 			
 			bedtools closest -a {output.MergedRndQualiIS} -b {ANNOTATION}/RefSeq/refFlatTSSsorted.bed -D b -t first > {output.distTSS};
 			"""
@@ -959,13 +971,13 @@ rule Features_association:
 
 rule Prepare_epiTracks:
 	input:
-	output: DATASET+"/epigenetics/rule.txt"
+	output: BASE+"/"+GENOME+"/epigenetics/rule.txt"
 	message: "Converting wig files to bigWig"
 	threads:8
 	shell: """
 			
-			find {DATASET}/epigenetics/ -type f -name "*.wig.gz" -print0 | xargs -0 -n1 -P{threads} -I {{}} {SCRIPTS}/wigTobigwig.sh {{}} {ANNOTATION}/RefSeq/hg19.chrom.sizes;
-			rm {DATASET}/epigenetics/*.wig.gz;
+			find {BASE}/{GENOME}/epigenetics/ -type f -name "*.wig.gz" -print0 | xargs -0 -n1 -P{threads} -I {{}} {SCRIPTS}/wigTobigwig.sh {{}} {BASE}/{GENOME}/genome/{GENOME}.chrom.sizes;
+			rm {BASE}/{GENOME}/epigenetics/*.wig.gz;
 			touch {output};
 			"""
 
@@ -991,17 +1003,31 @@ rule epigenetic_association:
 	threads:8
 	log:
 	shell: """
-			multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz01} --BED {input.IS01kb} --outRawCounts {output.tab01};
-			multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz1} --BED {input.IS1kb} --outRawCounts {output.tab1};
-			 multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz10} --BED {input.IS10kb} --outRawCounts {output.tab10};
-			 multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz100} --BED {input.IS100kb} --outRawCounts {output.tab100};
-			 multiBigwigSummary BED-file -p {threads} -b {DATASET}/epigenetics/*.bw -out {output.npz1M} --BED {input.IS1M} --outRawCounts {output.tab1M}
+			multiBigwigSummary BED-file -p {threads} -b {BASE}/{GENOME}/epigenetics/*.bw -out {output.npz01} --BED {input.IS01kb} --outRawCounts {output.tab01};
+			multiBigwigSummary BED-file -p {threads} -b {BASE}/{GENOME}/epigenetics/*.bw -out {output.npz1} --BED {input.IS1kb} --outRawCounts {output.tab1};
+			multiBigwigSummary BED-file -p {threads} -b {BASE}/{GENOME}/epigenetics/*.bw -out {output.npz10} --BED {input.IS10kb} --outRawCounts {output.tab10};
+			multiBigwigSummary BED-file -p {threads} -b {BASE}/{GENOME}/epigenetics/*.bw -out {output.npz100} --BED {input.IS100kb} --outRawCounts {output.tab100};
+			multiBigwigSummary BED-file -p {threads} -b {BASE}/{GENOME}/epigenetics/*.bw -out {output.npz1M} --BED {input.IS1M} --outRawCounts {output.tab1M}
 			"""			
-			
+#	
 rule MakeReport:
-	input:  rules.QC_stat.output, rules.AnnotateISRefSeq.output ,rules.Features_association.output.Genedensity1M,rules.epigenetic_association.output, rules.QuantIS.output.IScollapsed, rules.QualIS.output.merged_sorted_collapsed, rules.motif.output
+	input:  rules.QuantIS.output.IScollapsed, 
+			rules.QualIS.output.merged_sorted_collapsed,
+			rules.QC_stat.output, 
+			rules.epigenetic_association.output, 
+			rules.Features_association.output,
+			rules.motif.output,
+			rules.AnnotateISRefSeq.output
 	output: touch("{NAME}_TAG{TAG}_report.pdf")
 	threads: 1
+	shell: """
+			echo "Input_file:"{FILES0} > Info.txt;
+			echo "TAG_demultiplexed:TAG"{TAG} >> Info.txt;
+			echo "Genome:"{GENOME} >> Info.txt;
+			echo "Reference_path:"{BASE} >> Info.txt;
+			echo "Scripts_path:"{SCRIPTS} >> Info.txt;
+			echo "Annotation_path:"{ANNOTATION} >> Info.txt;
+			"""
 	
 onsuccess:
     print("Workflow finished, no error")
