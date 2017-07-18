@@ -1,28 +1,23 @@
 #### Script to merge all annotations from VISA pipeline
 #### GC
 
+# load all IS (qualitative) and performe the full annotation
 
-
-# Process annotation tables -----------------------------------------------
+# Load annotation tables -----------------------------------------------
 
 FILES <- list.files(path = "./10-Annotation/RefSeq/",full.names = T)
 
-Sample_name <- str_replace(basename(grep(FILES,pattern = "distTSS",value = T)),pattern = "_distTSS_IS.txt",replacement = "")
-
+# get annotation file with one line per IS and feature (1 line per transcript)
 All_annot <- read.delim(grep(FILES,pattern = "_IntragenicIS.txt",value = T),header = F)
 names(All_annot) <- c("Chr_IS","Start_IS","Stop_IS","Name_IS","Score_IS","Strand_IS","ReadCount_IS","Database", "Chr_Gene","Start_Gene","Stop_Gene","RefSeq","Score_Gene","Strand_Gene")
 
+# get annotation table
 refFlat <- read.delim(paste(Annotation_path,"RefSeq/refFlat.txt",sep = ""), header = F, col.names = c("GeneSymbol","RefSeq","Chr_Gene","Strand","TSS_Start","TSS_Stop","CDS_Start","CDS_Stop","ExonCount","Exon_Start","Exon_Stop"))
-# 
-# HGNC <- read.delim("./dataset/hg19/2017-04-03/HGNC/HGNC.txt", header = T) %>% filter(Status == "Approved")
 
+
+# get annotation in exons
 exons <- read.delim(grep(FILES,pattern = "_IntronExonIS.txt",value = T), header = F)
 names(exons) <- c("Chr_IS","Start_IS","Stop_IS","Name_IS","Score_IS","Strand_IS","ReadCount_IS", "Chr_Exon","Start_Exon","Stop_Exon","Name_Exon","GeneSymbol","Strand_Gene")
-
-# load quantitative IS
-quantitative <- read.delim(paste("./09-quantitativeIS/",Sample_name,"_quantIS.bed",sep = ""),header = F)
-names(quantitative) <- c("Chr_IS","Start_IS","Stop_IS","Name_IS","Score_IS","Strand_IS","ReadCount_ISquant","Fragment_Count")
-
 
 
 
@@ -31,12 +26,17 @@ names(quantitative) <- c("Chr_IS","Start_IS","Stop_IS","Name_IS","Score_IS","Str
 All_annot <- All_annot %>% 
   left_join(refFlat %>% select(1,2,3), by =c("RefSeq","Chr_Gene")) 
 
-## collapse IS per gene symbol and classify as intra/inter/promoter
+
+
+## collapse transcripts by gene symbol and classify IS as intra/inter/promoter
+
 All_annot_collapsed <- All_annot %>%
   group_by(Chr_IS,Start_IS,Stop_IS,Name_IS,Score_IS,Strand_IS,ReadCount_IS, GeneSymbol) %>%
   summarise(Database = toString(basename(as.character(unique(Database)))), refseq = toString(RefSeq))%>%
   mutate(Regions=ifelse(str_detect(Database,"refFlat.bed"),yes = "Intragenic",no = ifelse(str_detect(Database,pattern = "Prom.bed"),yes = "Promoter",no = "Intergenic"))) %>% 
   ungroup()
+
+
 
 ## Add exon information to intragenic IS
 Exons_collapsed <- exons %>% 
@@ -57,16 +57,17 @@ All_annot_collapsed$Position <-ifelse((All_annot_collapsed$Regions=="Intragenic"
                                                   no = All_annot_collapsed$Regions))
 
 
+rm(list = grep(ls(),pattern = "All_annot_collapsed|Sample_name|args",invert = T,value = T))
 
 # Filter fragments with low count and INDELS -------------------------------
-
+# load the quantitative output file with fragment length and count
 FILE <- list.files("09-quantitativeIS",pattern = "_quantIS_cluster_sorted.bed", full.names = T)
 intermediate_fragment_count <- read.delim(FILE,header=F)
 names(intermediate_fragment_count) <- c("Chr_IS","Start_IS","Stop_IS","Name_IS","Score_IS","Strand_IS","Size","ReadCount","Cluster")
 
 
 
-
+# collpase IS mapping at the same position and with the same fragment length
 intermediate_fragment_count_sum <- intermediate_fragment_count %>% 
   group_by(Chr_IS,Start_IS,Stop_IS,Strand_IS,Size) %>% 
   summarise(ReadCount = sum(ReadCount)) %>% 
@@ -76,12 +77,12 @@ intermediate_fragment_count_sum <- intermediate_fragment_count %>%
 
  temp <- intermediate_fragment_count_sum %>% 
    group_by(IS) %>% 
-   summarize(ReadCount_Raw=sum(ReadCount),
-             Fragments_Raw = n())
+   summarize(ReadCount_Raw_quant=sum(ReadCount),
+             Fragments_Raw_quant = n())
 
 
 ## add a filter to remove low count fragments
-# aggregate low count reads to fragment size with +/-1nt (probably an indel during sequencing)
+# aggregate low count reads to fragment size with +/-1nt (probably an indel during sequencing or trimming)
 
 intermediate_fragment_count_sum <- intermediate_fragment_count_sum %>% 
   group_by(IS) %>% 
@@ -110,17 +111,20 @@ Corrected_FragLengthCount <- intermediate_fragment_count_sum %>%
 
 temp2 <- Corrected_FragLengthCount %>% 
   group_by(IS) %>% 
-  summarize(ReadCount_Corrected=sum(ReadCount),
-            Fragments_Corrected = n(),
-            ReadCount_Corrected_gt10reads = sum(ReadCount[which(ReadCount>10)]),
-            Fragments_Corrected_gt10reads = length(which(ReadCount>10))) %>% 
-  arrange(desc(Fragments_Corrected))
+  summarize(ReadCount_Corrected_quant=sum(ReadCount),
+            Fragments_Corrected_quant = n(),
+            ReadCount_Corrected_gt10reads_quant = sum(ReadCount[which(ReadCount>10)]),
+            Fragments_Corrected_gt10reads_quant = length(which(ReadCount>10))) %>% 
+  arrange(desc(Fragments_Corrected_quant))
 
 
 temp <- left_join(temp,temp2, by = "IS")
 
 
 
+# Apply the sonicLength correction ----------------------------------------
+SonicAbundance <- estAbund(Corrected_FragLengthCount$IS,Corrected_FragLengthCount$Size)
+temp <- temp %>% mutate(SonicAbundance_quanti=SonicAbundance$theta)
 
 
 # Collapse all tables -----------------------------------------------------

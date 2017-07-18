@@ -120,17 +120,23 @@ rarecurve(tt,step=1000,lty = 2)
 
 ```
 
+# SonicLength correction
+
+```{r}
+plot(as.integer(full_annot$Fragments_Corrected_quant),as.integer(full_annot$SonicAbundance_quanti))
+abline(a = 0,b=1)
+```
 
 
-# Relative abundance distribution based on fragment count
+# Relative abundance distribution based on fragment count (sonicLength)
 ```{r}
 UniqueIS <- full_annot %>%
-  select(1:6,17) %>% 
+  select(1:6,20) %>% 
   distinct() %>% 
-  filter(!is.na(Fragments_Corrected)) %>% 
-  arrange(desc(Fragments_Corrected))
+  filter(!is.na(SonicAbundance_quanti)) %>% 
+  arrange(desc(SonicAbundance_quanti))
 
-plot(radfit(UniqueIS$Fragments_Corrected))
+plot(radfit(as.integer(UniqueIS$SonicAbundance_quanti)))
 
 ```
 
@@ -140,7 +146,7 @@ plot(radfit(UniqueIS$Fragments_Corrected))
 
 top <- full_annot %>% 
   group_by(Name_IS) %>% 
-  arrange(desc(Fragments_Corrected)) %>% 
+  arrange(desc(SonicAbundance_quanti)) %>% 
   ungroup()  %>% 
   slice(1:10)
 
@@ -161,10 +167,50 @@ ggplot(Corrected_FragLengthCount %>%
 
 ```{r}
 
-
-ggplot(Corrected_FragLengthCount %>% group_by(IS) %>% summarize(Frag=n(),ReadCOunt=sum(ReadCount)), aes(ReadCOunt,Frag)) + geom_point() + theme_bw() + xlab ("Read count per IS") + ylab("Fragment count per IS") + scale_x_log10() + scale_y_log10()
+ggplot(Corrected_FragLengthCount %>% 
+         group_by(IS) %>% 
+         summarize(Frag=n(),ReadCOunt=sum(ReadCount)), 
+       aes(ReadCOunt,Frag)) + 
+  geom_point() + 
+  theme_bw() + 
+  xlab ("Read count per IS") +
+  ylab("Fragment count per IS") +
+  scale_x_log10() + 
+  scale_y_log10()
 
 ```
+
+# Diversity indices
+```{r}
+input_mat <-as.matrix(full_annot %>% filter(!is.na(SonicAbundance_quanti))%>% pull(SonicAbundance_quanti))
+colnames(input_mat) <- Sample_name
+
+
+plot(Lc(full_annot %>% filter(!is.na(SonicAbundance_quanti))%>% pull(SonicAbundance_quanti)),col="red",lwd=2)
+
+results2 <- data.frame(diverse::diversity(data = t(input_mat),base = exp(1),type = c("variety","entropy","ev","gs","s")),
+                      "Gini_ineq"=ineq(input_mat),
+                              "Shannon_ChaoShen2003"= entropart::Shannon(t(input_mat),Correction = "ChaoShen"),
+                              "Shannon_MillerMadow1955"= entropart::Shannon(t(input_mat),Correction = "Miller"),
+                              "Shannon_GenCov"= entropart::Shannon(t(input_mat),Correction = "GenCov"),
+                              "Shannon_Grassberger2003"= entropart::Shannon(t(input_mat),Correction = "Grassberger2003"),
+                              "Shannon_ChaoWangJost2013"= entropart::Shannon(t(input_mat),Correction = "ChaoWangJost"),
+                              "Shannon_Zhang2012"= entropart::Shannon(t(input_mat),Correction = "ZhangHz"),
+                              "Shannon_MillerMadow1955"=entropy::entropy(t(input_mat),method = c("MM"),unit="log"),
+                              "Shannon_ChaoChen2003" = entropy::entropy(t(input_mat),method = c("CS"),unit="log"),
+                              "Cov_GoodTuring1953" = entropart::Coverage(Ns = t(input_mat),Estimator = "Turing"),
+                              "Cov_ChaoShen2010" = entropart::Coverage(Ns = t(input_mat),Estimator = "Chao"),
+                              "Cov_ZhangHuang2007" = entropart::Coverage(Ns = t(input_mat),Estimator = "ZhangHuang"),
+                      "Rich_Chao1_1984" = entropart::Richness(t(input_mat),Correction = "Chao1"),
+                      "Rich_iChao1_2014" = entropart::Richness(t(input_mat),Correction = "iChao1"),
+                      #"Rich_Jack" = entropart::Richness(t(input_mat),Correction = "Jackknife"),
+                      data.frame(t(estimateR(round(t(input_mat))))),
+                      "UC50berry2016" = length(which(cumsum(sort(t(input_mat) / sum(t(input_mat)),decreasing = F))>0.5)),
+                      "UC50berry2016norm" = length(which(cumsum(sort(t(input_mat) / sum(t(input_mat)),decreasing = F))>0.5))/length(t(input_mat))*100
+                      )
+kable(t(results2),digits=3,format.args = list(big.mark=" ",drop0trailing=T,scientific=F))
+```
+
 
 # Session information
 
@@ -172,5 +218,48 @@ ggplot(Corrected_FragLengthCount %>% group_by(IS) %>% summarize(Frag=n(),ReadCOu
 sessionInfo()
 ```
 
+---
 
+# Bibliography
+```
 
+# function "shannon(Correction=ChaoShen)" from entropart package uses the Coverage estimator from ZhangHuang not ChaoShen
+
+# Cov_ChaoShen2010
+# Chao, A. and Shen, T.-J. (2010). Program SPADE: Species Prediction And Diversity Estimation. Program and user's guide. CARE, Hsin-Chu, Taiwan.
+
+# Cov_GoodTuring1953
+# Good, I. J. (1953). On the Population Frequency of Species and the Estimation of Population Parameters. Biometrika 40(3/4): 237-264.
+
+# Cov_ZhangHuang2007
+# Zhang, Z. and Huang, H. (2007). Turing's formula revisited. Journal of Quantitative Linguistics 14(2-3): 222-241.
+
+# Rich_Chao1_1984
+# Chao, A. (1984) Nonparametric estimation of the number of classes in a population. Scandinavian Journal of Statistics 11:265-270.
+
+# Rich_iChao1_2014
+# Chiu, C.-H., Wang, Y.-T., Walther, B. A., Chao, A. (2014) An Improved Nonparametric Lower Bound of Species Richness via a Modified Good-Turing Frequency Formula. Biometrics 70(3):671-682
+
+# Shannon_ChaoShen2003
+# Chao, A. and Shen, T. J. (2003). Nonparametric estimation of Shannon's index of diversity when there are unseen species in sample. Environmental and Ecological Statistics 10(4): 429-443
+
+# Shannon_ChaoWangJost2013 
+# Chao, A., Wang, Y. T. and Jost, L. (2013). Entropy and the species accumulation curve: a novel entropy estimator via discovery rates of new species. Methods in Ecology and Evolution 4(11):1091-1100.
+
+# Shannon_MillerMadow1955
+# Miller, G. (1955) Note on the bias of information estimates. In: Quastler, H., editor. Information Theory in Psychology: Problems and Methods: 95-100.
+
+# entropy
+# Shannon, C. E. (1948). A Mathematical Theory of Communication. The Bell System Technical Journal 27: 379-423, 623-656.
+
+# Shannon_Grassberger2003
+# Grassberger, P. (2003). Entropy Estimates from Insufficient Samplings. ArXiv Physics e-prints 0307138.
+
+# Shannon_GenCov
+# Chao, A., Hsieh, T. C., Chazdon, R. L., Colwell, R. K., Gotelli, N. J. (2015) Unveiling the Species-Rank Abundance Distribution by Generalizing Good-Turing Sample Coverage Theory. Ecology 96(5): 1189-1201.
+
+# Shannon_Zhang2012
+# Zhang, Z. (2012). Entropy Estimation in Turing's Perspective. Neural Computation 24(5): 1368-1389
+
+#Horvitz, D.G., and D. J. Thompson. 1952. A generalization of sampling without replacement from a finite universe. J. Am. Stat. Assoc. 47:663-685.
+```

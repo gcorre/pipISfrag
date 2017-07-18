@@ -77,8 +77,8 @@ TAG=re.search('TAG([0-9]+)', SAMPLE).group(1)
 ###########################################################
 
 rule targets:
-	input: SAMPLE+"_TAG"+TAG+"_report.pdf"
-		
+	input: SAMPLE+"_TAG"+TAG+"_Info.txt"
+
 
 rule Prepare_folders:
 		input: 
@@ -1009,24 +1009,25 @@ rule epigenetic_association:
 			multiBigwigSummary BED-file -p {threads} -b {BASE}/{GENOME}/epigenetics/*.bw -out {output.npz100} --BED {input.IS100kb} --outRawCounts {output.tab100};
 			multiBigwigSummary BED-file -p {threads} -b {BASE}/{GENOME}/epigenetics/*.bw -out {output.npz1M} --BED {input.IS1M} --outRawCounts {output.tab1M}
 			"""			
-#	
+
 rule MakeReport:
 	input:  rules.QuantIS.output.IScollapsed, 
 			rules.QualIS.output.merged_sorted_collapsed,
 			rules.QC_stat.output, 
-			rules.epigenetic_association.output, 
-			rules.Features_association.output,
-			rules.motif.output,
-			rules.AnnotateISRefSeq.output
-	output: touch("{NAME}_TAG{TAG}_report.pdf")
+			rules.epigenetic_association.output.npz10, 
+			rules.Features_association.output.MergedRndQualiIS,
+			rules.motif.output.Ligmotif,
+			rules.AnnotateISRefSeq.output.all
+	output: "{NAME}_TAG{TAG}_Info.txt"
 	threads: 1
 	shell: """
-			echo "Input_file:"{FILES0} > Info.txt;
-			echo "TAG_demultiplexed:TAG"{TAG} >> Info.txt;
-			echo "Genome:"{GENOME} >> Info.txt;
-			echo "Reference_path:"{BASE} >> Info.txt;
-			echo "Scripts_path:"{SCRIPTS} >> Info.txt;
-			echo "Annotation_path:"{ANNOTATION} >> Info.txt;
+			echo "Input_file:"{FILES0} > {output};
+			echo "Sample_name:"{SAMPLE}"_TAG"{TAG} >> {output};
+			echo "TAG_demultiplexed:TAG"{TAG} >> {output};
+			echo "Genome:"{GENOME} >> {output};
+			echo "Reference_path:"{BASE} >> {output};
+			echo "Scripts_path:"{SCRIPTS} >> {output};
+			echo "Annotation_path:"{ANNOTATION} >> {output};
 			"""
 	
 onsuccess:
